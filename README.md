@@ -7,5 +7,9 @@
 - Normalization: Khanh
 - SQL Create table: Khanh
 - SQL Insert data: Kierra and Cynthia
+
+# ER diagram
 ![ER_diagram](design/ER_diagram.jpeg)
+
+# Relational Schema
 ![relation_schema](design/relational_schema.jpeg)
