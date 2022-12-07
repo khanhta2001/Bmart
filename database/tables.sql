@@ -32,9 +32,8 @@ CREATE TABLE product (
 	product_id INT PRIMARY KEY,
     source_nation VARCHAR(30),
     UPC_code INT,
-    price INT,
-    brand_id INT,
-    size INT,
+    standard_price INT,
+    size VARCHAR(5),
     packaging_number INT
 );
 
@@ -105,9 +104,9 @@ CREATE TABLE order_request (
     vendor_id INT,
     order_time TIME,
     amount_requested INT,
-    seen_or_not BOOL,
+    seen_or_not INT,
     total_cost INT,
-    order_status bool,
+    order_status INT,
     FOREIGN KEY (store_id) REFERENCES store(store_id),
     FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
