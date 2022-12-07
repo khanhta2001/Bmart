@@ -35,7 +35,7 @@ CREATE TABLE product (
     price INT,
     brand_id INT,
     size INT,
-    package_color INT
+    packaging_number INT
 );
 
 CREATE TABLE brand (
@@ -70,8 +70,7 @@ CREATE TABLE product_type (
 CREATE TABLE customers (
 	customers_id INT PRIMARY KEY,
     address VARCHAR(45),
-    phone_number INT,
-    product VARCHAR(45)
+    phone_number INT
 );
 
 CREATE TABLE customer_order (
@@ -84,7 +83,7 @@ CREATE TABLE customer_order (
 );
 
 CREATE TABLE items (
-	item_id INT,
+	item_id INT PRIMARY KEY,
     order_id INT,
     cost INT,
     FOREIGN KEY (order_id) REFERENCES customer_order(order_id)
@@ -116,18 +115,19 @@ CREATE TABLE order_request (
 CREATE TABLE shipment (
 	expected_delivery_time TIME,
     delivery_time TIME,
-    s_id INT,
+    shipment_id INT,
     request_id INT,
     vendor_id INT,
-    PRIMARY KEY (s_id),
+    PRIMARY KEY (shipment_id),
     FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
 
 CREATE TABLE shipment_group (
-	s_id INT,
+	shipment_id INT,
     request_id INT,
-    FOREIGN KEY (s_id) REFERENCES shipment(s_id),
-    FOREIGN KEY (request_id) REFERENCES order_request(request_id)
+    FOREIGN KEY (shipment_id) REFERENCES shipment(shipment_id),
+    FOREIGN KEY (request_id) REFERENCES order_request(request_id),
+    PRIMARY KEY (shipment_id, request_id)
 );
 
 
