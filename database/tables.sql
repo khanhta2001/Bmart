@@ -1,4 +1,6 @@
 DROP TABLE IF EXISTS shipment_group;
+DROP TABLE IF EXISTS product_package;
+DROP TABLE IF EXISTS order_group;
 DROP TABLE IF EXISTS shipment;
 DROP TABLE IF EXISTS order_request;
 DROP TABLE IF EXISTS inventory_space;
@@ -32,15 +34,12 @@ CREATE TABLE product (
 	product_id INT PRIMARY KEY,
     source_nation VARCHAR(30),
     UPC_code INT,
-    standard_price INT,
-    size VARCHAR(5),
-    packaging_number INT
+    standard_price INT
 );
 
 CREATE TABLE brand (
 	brand_id INT PRIMARY KEY,
-    product_id INT,
-    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id)
+    brand_name VARCHAR(60)
 );
 
 CREATE TABLE vendor (
@@ -114,7 +113,7 @@ CREATE TABLE order_request (
 CREATE TABLE shipment (
 	expected_delivery_time TIME,
     delivery_time TIME,
-    shipment_id INT,
+    shipment_id INT AUTO_INCREMENT,
     request_id INT,
     vendor_id INT,
     PRIMARY KEY (shipment_id),
@@ -127,6 +126,22 @@ CREATE TABLE shipment_group (
     FOREIGN KEY (shipment_id) REFERENCES shipment(shipment_id),
     FOREIGN KEY (request_id) REFERENCES order_request(request_id),
     PRIMARY KEY (shipment_id, request_id)
+);
+
+CREATE TABLE order_group (
+	request_id INT,
+    product_id INT,
+    FOREIGN KEY (request_id) REFERENCES order_request(request_id),
+    FOREIGN KEY (product_id) REFERENCES product(product_id),
+    PRIMARY KEY (request_id, product_id)
+);
+
+CREATE TABLE product_package (
+	packaging_number INT,
+    size VARCHAR(5),
+    product_id INT,
+    FOREIGN KEY (product_id) REFERENCES product(product_id),
+    PRIMARY KEY (product_id, size, packaging_number)
 );
 
 
