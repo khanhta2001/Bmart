@@ -15,57 +15,63 @@ def reorder(store):
         if store_name is None:
             print("Store does not exist")
             return
-        store_inventory = "SELECT * FROM inventory_space WHERE store_id = %s"
+        store_inventory = "SELECT product_id, maximum_space, current_stock FROM inventory_space WHERE store_id = %s"
         cursor.execute(store_inventory, (store,))
-        store_items = cursor.fetchone()
-        item_price = "SELECT * FROM price WHERE product_id = %s"
-        # This currently orders the same item over and over again
-        # should probably add loop to add several items
-        cursor.execute(item_price, (store_items[0],))
-        price = cursor.fetchone()
-        vendor = price[0]
-        product_price = price[3]
-        current_stock = store_items[3]
-        max_stock = store_items[2]
-        if current_stock == max_stock:
-            print("There is no need to reorder")
-            return
-        else:
-            try:
+        store_items = cursor.fetchall()
+        reordered_items = {}
+        vendor_reorder = {}
+        reorder_price = {}
+        reorder_request = False
+        for store_item in store_items:
+            item_price = "SELECT vendor_id,sell_price FROM price WHERE product_id = %s"
+            cursor.execute(item_price, (store_item[0],))
+            price = cursor.fetchone()
+            vendor = price[0]
+            product_price = price[1]
+            current_stock = store_item[2]
+            max_stock = store_item[1]
+            if current_stock == max_stock:
+                print("There is no need to reorder")
+            else:
                 # Add a check to see if the request id is equivalent to the request we are working
-                orders_rem = "SELECT store_id FROM order_request WHERE store_id = %s AND order_status = 0"
-                params5 = (store,)
-                cursor.execute(orders_rem, params5)
-                store_order_request = cursor.fetchall()
+                item_reorder = "SELECT request_id FROM order_group WHERE product_id = %s"
+                cursor.execute(item_reorder, (store_item[0],))
+                item_reorder = cursor.fetchall()
                 total_amount = 0
-                if len(store_order_request) == 0:
-                    if total_amount + current_stock < max_stock:
-                        print("Reorder is needed")
-                        reorder_amount = max_stock - current_stock - total_amount
-                        print("Reorder amount is:", reorder_amount)
-                        reorder_query = (
-                            "INSERT INTO order_request (vendor_id, store_id, amount_requested, order_time, "
-                            "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s, %s)")
-                        params = (
-                            vendor, store, reorder_amount, datetime.datetime.now(), product_price * reorder_amount, 0,
-                            0)
-                        cursor.execute(reorder_query, params)
-                        last_row = cursor.lastrowid
-                        order_group = ("INSERT INTO order_group (request_id, product_id) VALUES (%s, %s)")
-                        param = (last_row, store_items[0])
-                        cursor.execute(order_group, param)
-                        cnx.commit()
-                        return
+                if len(item_reorder) != 0:
+                    for request_id in item_reorder:
+                        orders_rem = "SELECT amount_requested FROM order_request WHERE store_id = %s AND request_id = %s AND order_status = 0"
+                        params5 = (store, request_id[0])
+                        cursor.execute(orders_rem, params5)
+                        amount = cursor.fetchone()
+                        total_amount += amount[0]
+                if total_amount + current_stock < max_stock:
+                    reorder_request = True
+                    reorder_amount = max_stock - current_stock - total_amount
+                    reordered_items[store_item[0]] = reorder_amount
+                    reorder_query = (
+                        "INSERT INTO order_request (vendor_id, store_id, amount_requested, order_time, "
+                        "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s, %s)")
+                    params = (
+                        vendor, store, reorder_amount, datetime.datetime.now(), product_price * reorder_amount, 0,
+                        0)
+                    cursor.execute(reorder_query, params)
+                    last_row = cursor.lastrowid
+                    order_group = ("INSERT INTO order_group (request_id, product_id) VALUES (%s, %s)")
+                    param = (last_row, store_item[0])
+                    cursor.execute(order_group, param)
+                    cnx.commit()
+                    reorder_price[store_item[0]] = product_price * reorder_amount
+                    if vendor in vendor_reorder:
+                        vendor_reorder[vendor] += 1
                     else:
-                        print('There is no need to reorder')
-                        return
+                        vendor_reorder[vendor] = 1
                 else:
-                    print("Order requests are already made")
-                    return
-            except mysql.connector.Error as err:
-                cnx.rollback()
-                print("Something went wrong: {}".format(err))
-                return
+                    print('There is no need to reorder')
+        if reorder_request:
+            print("The following items have been reordered:{}".format(reordered_items))
+            print("The following vendors have reorder requests:{}".format(vendor_reorder))
+            print("Total price of each reorder request:{}".format(reorder_price))
     except mysql.connector.Error as err:
         cnx.rollback()
         print("Something went wrong: {}".format(err))
@@ -77,8 +83,6 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
-        # The shipments must be inserted into the database
-        # Print a list of all the products in the shipment
         all_items = ''
         list_of_items = []
         for item in shipment_items:
@@ -90,44 +94,34 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             if product_name is not None:
                 all_items += product_name[0] + ' '
                 list_of_items.append(product_name[0])
-            else:
-                print("Product {} does not exist".format(item))
-        print(all_items)
-
         # Remaining reorder requests for this store particularly
         order_completed = {}
         for request_id in reorder_list:
-            orders_rem = "SELECT order_request.request_id,order_request.amount_requested, order_group.product_id, " \
-                         "order_request.vendor_id FROM " \
-                         "order_request JOIN order_group ON order_request.request_id = order_group.request_id WHERE " \
-                         "order_request.store_id = %s AND order_request.request_id = %s AND " \
-                         "order_request.order_status = 0 "
-            params5 = (store, request_id)
-            cursor.execute(orders_rem, params5)
-            order_request = cursor.fetchone()
-            if order_request is not None:
-                print("This order {} will be completed".format(order_request[0]))
-                order_completed[order_request[0]] = order_request[3]
-                update_order = "UPDATE order_request SET seen_or_not = 1 AND order_status = 1 WHERE request_id = %s"
-                params = (order_request[0],)
-                cursor.execute(update_order, params)
-                cnx.commit()
-            else:
-                print("This order {} does not exist".format(request_id))
-
-        # Remaining reorder requests for all BMart stores
-        all_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0"
-        cursor.execute(all_remaining_orders)
-        remaining_orders = cursor.fetchone()
-        if remaining_orders[0] - len(order_completed) == 0:
-            print("All orders are completed")
-        else:
-            print(remaining_orders[0] - len(order_completed), "orders are remaining")
+            check_shipment = "SELECT request_id FROM shipment WHERE request_id = %s"
+            params = (request_id,)
+            cursor.execute(check_shipment, params)
+            shipment = cursor.fetchone()
+            if shipment is None:
+                orders_rem = "SELECT order_request.request_id,order_request.amount_requested, order_group.product_id, " \
+                             "order_request.vendor_id FROM " \
+                             "order_request JOIN order_group ON order_request.request_id = order_group.request_id WHERE " \
+                             "order_request.store_id = %s AND order_request.request_id = %s AND " \
+                             "order_request.order_status = 0 "
+                params5 = (store, request_id)
+                cursor.execute(orders_rem, params5)
+                order_request = cursor.fetchone()
+                if order_request is not None:
+                    order_completed[order_request[0]] = order_request[3]
+                    update_order = "UPDATE order_request SET seen_or_not = 1, order_status = 1 WHERE request_id = %s"
+                    params = (order_request[0],)
+                    cursor.execute(update_order, params)
+                    cnx.commit()
+        vendor_store = {}
+        vendor_bmart = {}
         for request_id in order_completed:
-            bruh = order_completed[request_id]
-
-            shipment_request = "INSERT INTO shipment (expected_delivery_time, delivery_time,request_id, vendor_id) VALUES (%s, %s, %s, %s)"
-            params = (delivery_time, 0, request_id, order_completed[request_id])
+            vendor_id = order_completed[request_id]
+            shipment_request = "INSERT INTO shipment (expected_delivery_time, delivery_time,request_id, vendor_id, store_id) VALUES (%s, %s, %s, %s, %s)"
+            params = (delivery_time, 0, request_id, vendor_id, store)
             cursor.execute(shipment_request, params)
             cnx.commit()
             last_row = cursor.lastrowid
@@ -135,6 +129,27 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             params = (last_row, request_id)
             cursor.execute(shipment_group, params)
             cnx.commit()
+            print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id,store))
+            # Remaining reorder requests for all BMart stores from that specific vendor
+            vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND store_id = %s AND request_id != %s"
+            cursor.execute(vendor_remaining_orders, (vendor_id,store, request_id))
+            vendor_store_remaining_orders = cursor.fetchone()
+            vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND request_id != %s"
+            cursor.execute(vendor_remaining_orders, (vendor_id,request_id))
+            vendor_bmart_remaining_orders = cursor.fetchone()
+            if vendor_id not in vendor_store or vendor_store_remaining_orders[0] != 0:
+                vendor_store[vendor_id] = vendor_store_remaining_orders[0]
+            if vendor_id not in vendor_bmart or vendor_bmart_remaining_orders[0] != 0:
+                vendor_bmart[vendor_id] = vendor_bmart_remaining_orders[0]
+        if len(vendor_store) > 0:
+            print("Remaining reorder requests for this store: {}".format(vendor_store))
+        else:
+            print("There are no remaining reorder requests for this store")
+        if len(vendor_bmart) > 0:
+            print("Remaining reorder requests for all BMart stores: {}".format(vendor_bmart))
+        else:
+            print("There are no remaining reorder requests for all BMart stores")
+
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
             print("Something is wrong with your user name or password")
@@ -145,10 +160,6 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             print(err)
     else:
         cnx.close()
-
-
-vendor_shipment(1, datetime.datetime.now(), [1,2,3], {1: 20, 2: 20, 3: 4})
-
 
 def stockInventory(store, shipment, shipment_items):
     try:
@@ -213,3 +224,7 @@ def OnlineOrder(store, customer, order_items):
             print(err)
     else:
         cnx.close()
+#
+# reorder(1)
+# reorder(2)
+vendor_shipment(1, datetime.datetime.now(), [1,2,3], {1: 20, 2: 20, 3: 4})
