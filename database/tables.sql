@@ -32,6 +32,7 @@ CREATE TABLE store_price (
 
 CREATE TABLE product (
 	product_id INT PRIMARY KEY,
+    product_name VARCHAR(30),
     source_nation VARCHAR(30),
     UPC_code INT,
     standard_price INT
@@ -52,9 +53,9 @@ CREATE TABLE price (
     brand_id INT,
     product_id INT,
     sell_price INT,
-	FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id),
-	FOREIGN KEY (brand_id) REFERENCES brand(brand_id),
-    FOREIGN KEY (product_id) REFERENCES product(product_id),
+	CONSTRAINT FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id),
+	CONSTRAINT FOREIGN KEY (brand_id) REFERENCES brand(brand_id),
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
     PRIMARY KEY (vendor_id, brand_id, product_id)
 );
 
@@ -77,14 +78,14 @@ CREATE TABLE customer_order (
     order_type VARCHAR(45),
     store_id INT,
     whether_successful BOOL,
-    FOREIGN KEY (customers_id) REFERENCES customers(customers_id)
+    CONSTRAINT FOREIGN KEY (customers_id) REFERENCES customers(customers_id)
 );
 
 CREATE TABLE items (
 	item_id INT PRIMARY KEY,
     order_id INT,
     cost INT,
-    FOREIGN KEY (order_id) REFERENCES customer_order(order_id)
+    CONSTRAINT FOREIGN KEY (order_id) REFERENCES customer_order(order_id)
 );
 
 CREATE TABLE inventory_space (
@@ -93,8 +94,8 @@ CREATE TABLE inventory_space (
     maximum_space INT,
     current_stock INT,
     PRIMARY KEY (product_id, store_id),
-    FOREIGN KEY (store_id) REFERENCES store(store_id),
-    FOREIGN KEY (product_id) REFERENCES product(product_id)
+    CONSTRAINT FOREIGN KEY (store_id) REFERENCES store(store_id),
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id)
 );
 
 CREATE TABLE order_request (
@@ -106,8 +107,8 @@ CREATE TABLE order_request (
     seen_or_not INT,
     total_cost INT,
     order_status INT,
-    FOREIGN KEY (store_id) REFERENCES store(store_id),
-    FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
+    CONSTRAINT FOREIGN KEY (store_id) REFERENCES store(store_id),
+    CONSTRAINT FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
 
 CREATE TABLE shipment (
@@ -117,22 +118,22 @@ CREATE TABLE shipment (
     request_id INT,
     vendor_id INT,
     PRIMARY KEY (shipment_id),
-    FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
+    CONSTRAINT FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
 
 CREATE TABLE shipment_group (
 	shipment_id INT,
     request_id INT,
-    FOREIGN KEY (shipment_id) REFERENCES shipment(shipment_id),
-    FOREIGN KEY (request_id) REFERENCES order_request(request_id),
+    CONSTRAINT FOREIGN KEY (shipment_id) REFERENCES shipment(shipment_id),
+    CONSTRAINT FOREIGN KEY (request_id) REFERENCES order_request(request_id),
     PRIMARY KEY (shipment_id, request_id)
 );
 
 CREATE TABLE order_group (
 	request_id INT,
     product_id INT,
-    FOREIGN KEY (request_id) REFERENCES order_request(request_id),
-    FOREIGN KEY (product_id) REFERENCES product(product_id),
+    CONSTRAINT FOREIGN KEY (request_id) REFERENCES order_request(request_id),
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
     PRIMARY KEY (request_id, product_id)
 );
 
@@ -140,8 +141,8 @@ CREATE TABLE product_package (
 	packaging_number INT,
     size VARCHAR(5),
     product_id INT,
-    FOREIGN KEY (product_id) REFERENCES product(product_id),
-    PRIMARY KEY (product_id, size, packaging_number)
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
+	PRIMARY KEY (product_id, size, packaging_number)
 );
 
 

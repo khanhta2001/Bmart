@@ -1,7 +1,7 @@
 INSERT INTO store (store_id, address, phone_number, operation_hours) VALUES (1,"123 Rivian Road", 1234567890, 8);
 INSERT INTO store (store_id, address, phone_number, operation_hours) VALUES (2,"456 Bruh Road", 0987654321, 8);
-INSERT INTO product (product_id, source_nation, UPC_code, standard_price) VALUES (1, 'United States', 111111,'5');
-INSERT INTO product (product_id, source_nation, UPC_code, standard_price) VALUES (2, 'China', 999999,'3');
+INSERT INTO product (product_id, product_name, source_nation, UPC_code, standard_price) VALUES (1,'Pepsi', 'United States', 111111,'5');
+INSERT INTO product (product_id, product_name, source_nation, UPC_code, standard_price) VALUES (2,'coke', 'China', 999999,'3');
 INSERT INTO product_package (packaging_number, size, product_id) VALUES (1, 'L', 1);
 INSERT INTO product_package (packaging_number, size, product_id) VALUES (2, 'S', 2);
 INSERT INTO brand (brand_id, brand_name) VALUES (1,'coca');
