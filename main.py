@@ -13,7 +13,7 @@ def reorder(store):
         cursor.execute(query, params)
         store_name = cursor.fetchone()
         if store_name is None:
-            print("Store does not exist")
+            print("Store id {} does not exist".format(store))
             return
         store_inventory = "SELECT product_id, maximum_space, current_stock FROM inventory_space WHERE store_id = %s"
         cursor.execute(store_inventory, (store,))
@@ -83,17 +83,14 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
-        all_items = ''
-        list_of_items = []
         for item in shipment_items:
             # add a name field to product table
-            get_product = "SELECT product_name FROM product WHERE product_id = %s"
+            get_product = "SELECT request_id FROM order_group WHERE product_id = %s"
             params = (item,)
             cursor.execute(get_product, params)
             product_name = cursor.fetchone()
-            if product_name is not None:
-                all_items += product_name[0] + ' '
-                list_of_items.append(product_name[0])
+            if product_name is None:
+                print("Invalid shipment item {}!. This item is not needed for this order".format(item))
         # Remaining reorder requests for this store particularly
         order_completed = {}
         for request_id in reorder_list:
@@ -129,13 +126,13 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             params = (last_row, request_id)
             cursor.execute(shipment_group, params)
             cnx.commit()
-            print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id,store))
+            print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
             # Remaining reorder requests for all BMart stores from that specific vendor
             vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND store_id = %s AND request_id != %s"
-            cursor.execute(vendor_remaining_orders, (vendor_id,store, request_id))
+            cursor.execute(vendor_remaining_orders, (vendor_id, store, request_id))
             vendor_store_remaining_orders = cursor.fetchone()
             vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND request_id != %s"
-            cursor.execute(vendor_remaining_orders, (vendor_id,request_id))
+            cursor.execute(vendor_remaining_orders, (vendor_id, request_id))
             vendor_bmart_remaining_orders = cursor.fetchone()
             if vendor_id not in vendor_store or vendor_store_remaining_orders[0] != 0:
                 vendor_store[vendor_id] = vendor_store_remaining_orders[0]
@@ -156,42 +153,64 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
         elif err.errno == errorcode.ER_BAD_DB_ERROR:
             print("Database does not exist")
         else:
-            cnx.rollback()
             print(err)
     else:
         cnx.close()
+
 
 def stockInventory(store, shipment, shipment_items):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
-        # Details about the shipment that was just received, number of each product and product name that are supposed to be in shipment
-        product_list = "SELECT product_id, name, amount_requested FROM product JOIN order_group ON order_group.product_id = product.product_id"
-        product_list += "JOIN order_request ON order_group.request_id = order_request.product_id JOIN shipment_group on shipment_group.request_id = order_request.request_id"
-        product_list += "WHERE shipment_id = %s"
-        cursor.execute(product_list, (shipment,))
-        for (name, amount_requested) in cursor:
-            print({}, {}).format(amount_requested, name)
-
-        # Details about the shipment that was just received, number of each and product names that were actually received
-        unique_products = set[shipment_items]
-        for product in unique_products:
-            num_of_item = shipment_items.count(product)
-            product_name = "SELECT name FROM product WHERE product_id = %s"
-            cursor.execute(product_name, (product,))
-            for name in cursor:
-                print(num_of_item, "of", {}).format(name)
-
-            # shipment_items will be a list of product ids
-
-            # count the number of
-
-        # A list of the differences between what the shipment was supposed to contain and what it actually contained
-
-
-
-
-
+        shipment_info = "SELECT shipment.shipment_id, shipment.vendor_id, shipment.store_id, order_group.product_id FROM shipment JOIN " \
+                         "order_request ON shipment.request_id = order_request.request_id JOIN order_group ON " \
+                         "order_request.request_id = order_group.request_id WHERE shipment.shipment_id = %s "
+        params = (shipment,)
+        cursor.execute(shipment_info, params)
+        shipment_info = cursor.fetchone()
+        if shipment_info is None:
+            print("Invalid shipment! Shipment id {} does not exist".format(shipment))
+            return
+        difference_amount = {}
+        shipment_success = False
+        for item in shipment_items:
+            # Check if the shipment item is in the shipment
+            get_product = "SELECT order_group.product_id, order_request.amount_requested  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
+            params = (item, shipment)
+            cursor.execute(get_product, params)
+            product_info = cursor.fetchone()
+            if product_info is None:
+                print("Invalid shipment item {}!. This item is not in the shipment".format(item))
+            else:
+                if product_info[1] < shipment_items[item]:
+                    print("The amount requested for product id {} is less than the amount received".format(item))
+                    difference_amount[item] = shipment_items[item] - product_info[1]
+                elif product_info[1] > shipment_items[item]:
+                    print("The amount requested for product id {} is more than the amount received".format(item))
+                    difference_amount[item] = shipment_items[item] - product_info[1]
+                current_stock = "SELECT current_stock, maximum_space FROM inventory_space WHERE store_id = %s AND product_id = %s"
+                params = (store, item)
+                cursor.execute(current_stock, params)
+                current_stock = cursor.fetchone()
+                if current_stock[0] + shipment_items[item] > current_stock[1]:
+                    print("The amount of product id {} in the inventory space is more than maximum space".format(item))
+                    print("This shipment will be rejected")
+                    return
+                stock = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
+                params = (current_stock[0] + shipment_items[item], item, store)
+                cursor.execute(stock, params)
+                cnx.commit()
+                update_shipment_info = "UPDATE shipment SET delivery_time = %s WHERE shipment_id = %s"
+                shipped_time = datetime.datetime.now() + datetime.timedelta(days=2)
+                params = (shipped_time, shipment)
+                cursor.execute(update_shipment_info, params)
+                cnx.commit()
+                shipment_success = True
+        if shipment_success:
+            print("Shipment {} has been received".format(shipment))
+            print("Shipment information is as follows: shipment id: {}, vendor id: {}, arrived time: {}, product id: {}, amount requested: {}".format(shipment_info[0], shipment_info[1], shipped_time, shipment_info[3], shipment_items[shipment_info[3]]))
+        if len(difference_amount) > 0:
+            print("The following items have a difference amount: {}".format(difference_amount))
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
             print("Something is wrong with your user name or password")
@@ -224,7 +243,9 @@ def OnlineOrder(store, customer, order_items):
             print(err)
     else:
         cnx.close()
-#
+
+
 # reorder(1)
 # reorder(2)
-vendor_shipment(1, datetime.datetime.now(), [1,2,3], {1: 20, 2: 20, 3: 4})
+# vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2, 3], {1: 20, 2: 20, 3: 4})
+stockInventory(1,1, {1: 20, 2: 20, 3: 4})
