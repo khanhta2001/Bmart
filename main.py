@@ -56,7 +56,8 @@ def reorder(store):
                         cursor.execute(orders_rem, params5)
                         amount = cursor.fetchone()
                         # Get total amount of the item from orders
-                        total_amount += amount[0]
+                        if amount is not None:
+                            total_amount += amount[0]
                 # check if the item needs to be reordered
                 if total_amount + current_stock < max_stock:
                     reorder_request = True
@@ -94,8 +95,7 @@ def reorder(store):
         print("Something went wrong: {}".format(err))
         return
     else:
-        cnx.rollback()
-        cnx.close()
+        cursor.close()
         return
 
 
@@ -136,6 +136,7 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
         if invalid_product > 0:
             return
         # update the order request as seen by vendor and will be completed
+        invalid_request = 0
         for request_id in reorder_list:
             check_shipment = "SELECT request_id, delivery_time FROM shipment WHERE request_id = %s"
             params = (request_id,)
@@ -148,25 +149,28 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
                     cnx.rollback()
                     cnx.close()
                     return
-            orders_rem = "SELECT order_request.request_id,order_request.amount_requested, order_group.product_id, " \
-                         "order_request.vendor_id FROM " \
-                         "order_request JOIN order_group ON order_request.request_id = order_group.request_id WHERE " \
-                         "order_request.store_id = %s AND order_request.request_id = %s AND " \
-                         "order_request.order_status = 0 "
+            orders_rem = "SELECT request_id, vendor_id FROM " \
+                         "order_request WHERE " \
+                         "store_id = %s AND request_id = %s AND " \
+                         "order_status = 0 "
             params5 = (store, request_id)
             cursor.execute(orders_rem, params5)
             order_request = cursor.fetchone()
             if order_request is not None:
-                order_completed[order_request[0]] = order_request[3]
+                order_completed[order_request[0]] = order_request[1]
                 update_order = "UPDATE order_request SET seen_or_not = 1, order_status = 1 WHERE request_id = %s"
                 params = (order_request[0],)
                 cursor.execute(update_order, params)
                 cnx.commit()
             else:
-                print("There are no orders to be completed")
-                cnx.rollback()
-                cnx.close()
-                return
+                print("There is no order {} to be completed".format(request_id))
+                invalid_request += 1
+
+        if invalid_request > 0:
+            cnx.rollback()
+            cnx.close()
+            return
+
         vendor_store = {}
         vendor_bmart = {}
         # get the vendor id and store id
@@ -290,6 +294,8 @@ def stockInventory(store, shipment, shipment_items):
             if current_stock[0] + shipment_items[item] > current_stock[1]:
                 print("The amount of product id {} in the inventory space is more than maximum space".format(item))
                 print("This shipment will be rejected")
+                cnx.rollback()
+                cnx.close()
                 return
 
             # update the stock inventory for the product if the total amount is less than the maximum space
@@ -321,7 +327,6 @@ def stockInventory(store, shipment, shipment_items):
         elif err.errno == errorcode.ER_BAD_DB_ERROR:
             print("Database does not exist")
         else:
-            cnx.rollback()
             print(err)
     else:
         cnx.close()
@@ -438,5 +443,5 @@ def OnlineOrder(store, customer, order_items):
 #OnlineOrder(1, 1, {1: 1})
 # reorder(1)
 # reorder(2)
-vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2, 3], {1: 20})
+# vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [2], {2: 20})
 # stockInventory(1,1, {1: 20, 2: 20, 3: 4})
