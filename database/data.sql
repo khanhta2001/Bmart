@@ -1,5 +1,5 @@
-INSERT INTO store (store_id, address, phone_number, operation_hours) VALUES (1,"123 Rivian Road","IL", 1234567890, 8);
-INSERT INTO store (store_id, address, phone_number, operation_hours) VALUES (2,"456 Bruh Road","IL", 0987654321, 8);
+INSERT INTO store (store_id, address, state, phone_number, operation_hours) VALUES (1,"123 Rivian Road","IL", 1234567890, 8);
+INSERT INTO store (store_id, address, state, phone_number, operation_hours) VALUES (2,"456 Bruh Road","IL", 0987654321, 8);
 INSERT INTO product (product_id, product_name, source_nation, UPC_code, standard_price) VALUES (1,'Pepsi', 'United States', 111111,'5');
 INSERT INTO product (product_id, product_name, source_nation, UPC_code, standard_price) VALUES (2,'coke', 'China', 999999,'3');
 INSERT INTO product_package (packaging_number, size, product_id) VALUES (1, 'L', 1);
@@ -15,4 +15,6 @@ INSERT INTO inventory_space (store_id, product_id, maximum_space, current_stock)
 INSERT INTO product_type (product_id, product_type) VALUES (1,"type1");
 INSERT INTO product_type (product_id, product_type) VALUES (2,"type2");
 INSERT INTO customers (customers_id, address, phone_number) VALUES (1,"123 Grad Road", 1234567890);
-INSERT INTO customers (customers_id, address, phone_number) VALUES (2,"345 Brian Road", 8765432190);
+INSERT INTO customers (customers_id, address, phone_number) VALUES (2,"345 Brian Road", 1765432190);
+INSERT INTO store_price (store_id, product_id, override_price) VALUES (1, 1, 6);
+INSERT INTO store_price (store_id, product_id, override_price) VALUES (2, 2, 10);
