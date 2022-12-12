@@ -314,6 +314,7 @@ def OnlineOrder(store, customer, order_items):
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
 
+        in_stock = 0
         # check if each of the product in the order are in stock in the current store
         for item in order_items:
             inventory = "SELECT product_id, current_stock FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
@@ -331,20 +332,25 @@ def OnlineOrder(store, customer, order_items):
                 # and see if any other store in the same state has the product
                 address = "SELECT state FROM store where store_id = %s"
                 cursor.execute(address, (store))
-                current_state = cursor.fetchone()
-                current_state = current_state[0]
-
+                current_state = cursor.fetchone()[0]
                 stock = "SELECT store_id FROM store WHERE state = %s"
                 cursor.execute(stock, [current_state])
                 available_store = cursor.fetchone()[0]
                 print("This product is in stock in store " + available_store)
                 break
-            # if all the products are in stock, continue with the transaction 
-            else:
-                # change the record for current stock of the products just sold
-                new_stock = product[1] - order_items[item]
-                change = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
-                cursor.execute(change, [new_stock, item, store])
+            
+            in_stock += 1
+
+        # if all the products are in stock, continue with the transaction 
+        if in_stock == len(order_items):
+            # decrease current stock of the products just sold
+            new_stock = product[1] - order_items[item]
+            change = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
+            cursor.execute(change, [new_stock, item, store])
+            # record the order in the database
+            record = "INSERT INTO customer_order (order_type, customer_id, store_id) VALUES (%s, %s, %s)"
+            cursor.execute(record, ('online', customer, store))
+
 
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
