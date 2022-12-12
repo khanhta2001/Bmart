@@ -30,46 +30,44 @@ def reorder(store):
         vendor_reorder = {}
         reorder_price = {}
         reorder_request = False
-        # check store items and reorder if needed
+        # check if reorder is needed for each store item
         for store_item in store_items:
-            item_price = "SELECT vendor_id,sell_price FROM price WHERE product_id = %s"
+            item_price = "SELECT vendor_id, sell_price FROM price WHERE product_id = %s"
             cursor.execute(item_price, (store_item[0],))
-            price = cursor.fetchone()
-            vendor = price[0]
-            product_price = price[1]
+            vender_price = cursor.fetchone()
+            vendor = vender_price[0]
+            product_price = vender_price[1]
             current_stock = store_item[2]
             max_stock = store_item[1]
-            # check if the item needs to be reordered
-            if current_stock == max_stock:
-                print("There is no need to reorder")
-            else:
-                # Add a check to see if the request id is equivalent to the request we are working
+
+            if current_stock < max_stock:
+                # Check if the request id is equivalent to the request we are working
                 item_reorder = "SELECT request_id FROM order_group WHERE product_id = %s"
                 cursor.execute(item_reorder, (store_item[0],))
                 item_reorder = cursor.fetchall()
-                total_amount = 0
-                # check if the item has been ordered before
+                ordered_amount = 0
+                # check if there is outstanding reorder request for the item
                 if len(item_reorder) != 0:
                     for request_id in item_reorder:
                         orders_rem = "SELECT amount_requested FROM order_request WHERE store_id = %s AND request_id = %s AND order_status = 0"
                         params5 = (store, request_id[0])
                         cursor.execute(orders_rem, params5)
                         amount = cursor.fetchone()
-                        # Get total amount of the item from orders
+                        # increment by the amount of item in each outstanding order request
                         if amount is not None:
-                            total_amount += amount[0]
-                # check if the item needs to be reordered
-                if total_amount + current_stock < max_stock:
+                            ordered_amount += amount[0]
+                
+                # check if new reorder request is needed for the item
+                if ordered_amount + current_stock < max_stock:
                     reorder_request = True
-                    reorder_amount = max_stock - current_stock - total_amount
+                    reorder_amount = max_stock - current_stock - ordered_amount
                     reordered_items[store_item[0]] = reorder_amount
                     # insert into the database to keep track of the order
                     reorder_query = (
                         "INSERT INTO order_request (vendor_id, store_id, amount_requested, order_time, "
                         "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s, %s)")
                     params = (
-                        vendor, store, reorder_amount, datetime.datetime.now(), product_price * reorder_amount, 0,
-                        0)
+                        vendor, store, reorder_amount, datetime.datetime.now(), product_price * reorder_amount, 0, 0)
                     cursor.execute(reorder_query, params)
                     # insert into the database for order_group to keep track of the order
                     last_row = cursor.lastrowid
@@ -85,7 +83,12 @@ def reorder(store):
                     else:
                         vendor_reorder[vendor] = 1
                 else:
-                    print('There is no need to reorder')
+                    print('Enough reorder requests have been made')
+                    # if stock is full, print a message
+
+            if current_stock == max_stock:
+                print("There is no need to reorder, all items are in stock")
+
         # print out the reorder if there is a need to reorder
         if reorder_request:
             print("The following items have been reordered:{}".format(reordered_items))
