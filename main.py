@@ -3,7 +3,6 @@ import datetime
 import mysql.connector
 from mysql.connector import errorcode
 
-#bruh 
 def reorder(store):
     """
     This function is used to reorder products for a store.  It will check the reorder point and reorder amount for each product
@@ -31,6 +30,8 @@ def reorder(store):
         reorder_price = {}
         reorder_request = False
         # check if reorder is needed for each store item
+        full_items = []
+        need_reorder = []
         for store_item in store_items:
             item_price = "SELECT vendor_id, sell_price FROM price WHERE product_id = %s"
             cursor.execute(item_price, (store_item[0],))
@@ -39,7 +40,6 @@ def reorder(store):
             product_price = vender_price[1]
             current_stock = store_item[2]
             max_stock = store_item[1]
-
             if current_stock < max_stock:
                 # Check if the request id is equivalent to the request we are working
                 item_reorder = "SELECT request_id FROM order_group WHERE product_id = %s"
@@ -83,12 +83,18 @@ def reorder(store):
                     else:
                         vendor_reorder[vendor] = 1
                 else:
+                    need_reorder.append(store_item[0])
                     print('Enough reorder requests have been made')
                     # if stock is full, print a message
-
-            if current_stock == max_stock:
-                print("There is no need to reorder, all items are in stock")
-
+            elif current_stock == max_stock:
+                full_items.append(store_item[0])
+        if len(need_reorder) != 0:
+            print('The following items have enough reorder requests: {}'.format(need_reorder))
+        if len(full_items) == len(store_items):
+            print('No need to reorder, all items are full')
+        else:
+            for item in full_items:
+                print('Reorder request is not needed for the item {}'.format(item))
         # print out the reorder if there is a need to reorder
         if reorder_request:
             print("The following items have been reordered:{}".format(reordered_items))
