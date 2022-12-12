@@ -117,6 +117,7 @@ CREATE TABLE shipment (
     shipment_id INT AUTO_INCREMENT,
     request_id INT,
     vendor_id INT,
+    store_id INT,
     PRIMARY KEY (shipment_id),
     CONSTRAINT FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
