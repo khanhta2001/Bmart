@@ -3,7 +3,7 @@ import datetime
 import mysql.connector
 from mysql.connector import errorcode
 
-
+#bruh 
 def reorder(store):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
