@@ -307,7 +307,7 @@ def OnlineOrder(store, customer, order_items):
     This function is used to place an online order by a customer
     :param store: store_id, an integer
     :param customer: customer_id, an integer
-    :param order_items: order_items, a dictionary of integers
+    :param order_items: order_items, a dictionary of integers where key is product_id and value is quantity
     :return:
     """
     try:
@@ -317,40 +317,84 @@ def OnlineOrder(store, customer, order_items):
         in_stock = 0
         # check if each of the product in the order are in stock in the current store
         for item in order_items:
-            inventory = "SELECT product_id, current_stock FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
+            inventory = "SELECT current_stock FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
             cursor.execute(inventory, (item, store))
-            product = cursor.fetchone()
-            # get the name of the product from product table so if it's out of stock we can tell the customer
-            name = "SELECT product_name FROM product WHERE product_id = %s"
-            cursor.execute(name, [product[0]])
-            product_name = cursor.fetchone()
+            product_inventory = cursor.fetchone()
+            # if an invalid product is entered, give the customer a warning message
+            if product_inventory == None:
+                print('Invalid product!')
+            else:    
+                # get the name of the product from product table so if it's out of stock we can tell the customer
+                name = "SELECT product_name FROM product WHERE product_id = %s"
+                cursor.execute(name, [item])
+                product_name = cursor.fetchone()
 
-            # if current stock of a product is less than the amount the customer entered
-            if product[1] < order_items[item]:
-                # give error message
-                print('Purchase failed because ' + product_name + ' is out of stock at this store')
-                # and see if any other store in the same state has the product
-                address = "SELECT state FROM store where store_id = %s"
-                cursor.execute(address, (store))
-                current_state = cursor.fetchone()[0]
-                stock = "SELECT store_id FROM store WHERE state = %s"
-                cursor.execute(stock, [current_state])
-                available_store = cursor.fetchone()[0]
-                print("This product is in stock in store " + available_store)
-                break
-            
-            in_stock += 1
+                # if current stock of a product is less than the amount the customer entered
+                if product_inventory[0] < order_items[item]:
+                    # give error message
+                    print('Purchase failed because ' + product_name + ' is out of stock at this store')
+                    # and see if any other store in the same state has the product
+                    address = "SELECT state FROM store where store_id = %s"
+                    cursor.execute(address, (store))
+                    current_state = cursor.fetchone()[0]
+                    stock = "SELECT store_id FROM store WHERE state = %s"
+                    cursor.execute(stock, [current_state])
+                    available_store = cursor.fetchone()[0]
+                    print("This product is in stock in store " + available_store)
+                    break
 
+                in_stock += 1
+ 
         # if all the products are in stock, continue with the transaction 
         if in_stock == len(order_items):
-            # decrease current stock of the products just sold
-            new_stock = product[1] - order_items[item]
-            change = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
-            cursor.execute(change, [new_stock, item, store])
+            for item in order_items:
+                # decrease current stock of the product
+                inventory = "SELECT current_stock FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
+                cursor.execute(inventory, (item, store))
+                product_inventory = cursor.fetchone()
+                new_stock = product_inventory[0] - order_items[item]
+                change = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
+                cursor.execute(change, [new_stock, item, store])
+
             # record the order in the database
             record = "INSERT INTO customer_order (order_type, customer_id, store_id) VALUES (%s, %s, %s)"
             cursor.execute(record, ('online', customer, store))
+            # give the customer information on the order they just made
 
+            print('Order successfully placed!')
+
+            name = "SELECT customer_name FROM customers WHERE customer_id = %s"
+            cursor.execute(customer_name, [customer])
+            customer_name = cursor.fetchone()[0]
+            print('Customer name: ' + customer_name)
+
+            phone = "SELECT phone_number FROM customers WHERE customer_id = %s"
+            cursor.execute(phone, [customer])
+            customer_phone = cursor.fetchone()[0]
+            print('Customer contact: '+ customer_phone)
+
+            address = "SELECT address FROM customers WHERE customer_id = %s"
+            cursor.execute(customer_name, [customer])
+            customer_address = cursor.fetchone()[0]
+            print('Customer Address: ' + customer_address)
+
+            total_price = 0
+            # A list of the ordered items and their quantities
+            print('Ordered items: ') 
+            for item in order_items:
+                # get the name of the product from product table 
+                name = "SELECT product_name FROM product WHERE product_id = %s"
+                cursor.execute(name, [item])
+                product_name = cursor.fetchone()[0]
+                print(product_name + ', quantity: ' + order_items[item])
+
+                price = "SELECT override_price FROM store_price WHERE store_id = %s AND product_id = %s"
+                cursor.execute(price, [store, item])
+                item_price = cursor.fetchone()[0]
+                total_price += item_price
+            
+            # The total price for that order, based on the current store price for each of those items.
+            print('Total price: ' + total_price)
 
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
