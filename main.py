@@ -365,8 +365,11 @@ def OnlineOrder(store, customer, order_items):
                     current_state = cursor.fetchone()[0]
                     stock = "SELECT store_id FROM store WHERE state = %s"
                     cursor.execute(stock, [current_state])
-                    available_store = cursor.fetchone()[0]
-                    print("This product is in stock in store " + available_store)
+                    available_store = cursor.fetchone()
+                    if available_store == None:
+                        print('Unfortunately it is out of stock in all our stores in this state!')
+                    else:
+                        print("This product is in stock in store " + available_store[0])
                     break
 
                 in_stock += 1
@@ -416,7 +419,7 @@ def OnlineOrder(store, customer, order_items):
 
                 price = "SELECT override_price FROM store_price WHERE store_id = %s AND product_id = %s"
                 cursor.execute(price, [store, item])
-                item_price = cursor.fetchone()[0]
+                item_price = cursor.fetchone()[0] * order_items[item]
                 total_price += item_price
             
             # The total price for that order, based on the current store price for each of those items.
