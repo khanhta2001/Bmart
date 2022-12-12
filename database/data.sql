@@ -14,7 +14,7 @@ INSERT INTO inventory_space (store_id, product_id, maximum_space, current_stock)
 INSERT INTO inventory_space (store_id, product_id, maximum_space, current_stock) VALUES (2,2, 30, 10);
 INSERT INTO product_type (product_id, product_type) VALUES (1,"type1");
 INSERT INTO product_type (product_id, product_type) VALUES (2,"type2");
-INSERT INTO customers (customers_id, address, phone_number) VALUES (1,"123 Grad Road", 1234567890);
-INSERT INTO customers (customers_id, address, phone_number) VALUES (2,"345 Brian Road", 1765432190);
+INSERT INTO customers (customer_id, customer_name, address, phone_number) VALUES (1,"Cynthia","123 Grad Road", 1234567890);
+INSERT INTO customers (customer_id, customer_name, address, phone_number) VALUES (2,"Shufan","345 Brian Road", 1765432190);
 INSERT INTO store_price (store_id, product_id, override_price) VALUES (1, 1, 6);
 INSERT INTO store_price (store_id, product_id, override_price) VALUES (2, 2, 10);

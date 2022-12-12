@@ -68,18 +68,18 @@ CREATE TABLE product_type (
 );
 
 CREATE TABLE customers (
-	customers_id INT PRIMARY KEY,
+	customer_id INT PRIMARY KEY,
+    customer_name VARCHAR(50),
     address VARCHAR(45),
     phone_number INT
 );
 
 CREATE TABLE customer_order (
-	order_id INT PRIMARY KEY,
-    customers_id INT,
+	order_id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT,
     order_type VARCHAR(45),
     store_id INT,
-    whether_successful BOOL,
-    CONSTRAINT FOREIGN KEY (customers_id) REFERENCES customers(customers_id)
+    CONSTRAINT FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
 );
 
 CREATE TABLE items (
