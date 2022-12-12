@@ -231,33 +231,33 @@ def OnlineOrder(store, customer, order_items):
 
         # check if each of the product in the order are in stock in the current store
         for item in order_items:
-            inventory = "SELECT * FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
+            inventory = "SELECT product_id, current_stock FROM inventory_space AS i WHERE i.product_id = %s AND i.store_id = %s"
             cursor.execute(inventory, (item, store))
             product = cursor.fetchone()
             # get the name of the product from product table so if it's out of stock we can tell the customer
             name = "SELECT product_name FROM product WHERE product_id = %s"
-            cursor.execute(name, [product['product_id']])
+            cursor.execute(name, [product[0]])
             product_name = cursor.fetchone()
 
             # if current stock of a product is less than the amount the customer entered
-            if product['current_stock'] < order_items[item]:
+            if product[1] < order_items[item]:
                 # give error message
                 print('Purchase failed because ' + product_name + ' is out of stock at this store')
                 # and see if any other store in the same state has the product
-                address = "SELECT address FROM store where store_id = %s"
+                address = "SELECT state FROM store where store_id = %s"
                 cursor.execute(address, (store))
-                current_state = cursor.fetchone()[0]  # need to parse the state from address, HOW DO WE DO THAT???????
+                current_state = cursor.fetchone()
+                current_state = current_state[0]
 
-                stock = "SELECT store_id FROM store WHERE address LIKE %s"
+                stock = "SELECT store_id FROM store WHERE state = %s"
                 cursor.execute(stock, [current_state])
                 available_store = cursor.fetchone()[0]
                 print("This product is in stock in store " + available_store)
                 break
-
             # if all the products are in stock, continue with the transaction 
             else:
                 # change the record for current stock of the products just sold
-                new_stock = order_items[item]
+                new_stock = product[1] - order_items[item]
                 change = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
                 cursor.execute(change, [new_stock, item, store])
 
