@@ -457,7 +457,8 @@ def OnlineOrder(store, customer, order_items):
     else:
         cnx.close()
 
-OnlineOrder(1, 1, {1: 1})
+for i in range(50):
+    OnlineOrder(1, 1, {1: 1})
 # reorder(1)
 # reorder(1)
 # reorder(2)
