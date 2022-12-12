@@ -35,9 +35,9 @@ def reorder(store):
         for store_item in store_items:
             item_price = "SELECT vendor_id, sell_price FROM price WHERE product_id = %s"
             cursor.execute(item_price, (store_item[0],))
-            vender_price = cursor.fetchone()
-            vendor = vender_price[0]
-            product_price = vender_price[1]
+            vendor_price = cursor.fetchone()
+            vendor = vendor_price[0]
+            product_price = vendor_price[1]
             current_stock = store_item[2]
             max_stock = store_item[1]
             if current_stock < max_stock:
@@ -49,7 +49,7 @@ def reorder(store):
                 # check if there is outstanding reorder request for the item
                 if len(item_reorder) != 0:
                     for request_id in item_reorder:
-                        orders_rem = "SELECT amount_requested FROM order_request WHERE store_id = %s AND request_id = %s AND order_status = 0"
+                        orders_rem = "SELECT order_group.amount_requested FROM order_request JOIN order_group ON order_request.request_id = order_group.request_id WHERE order_request.store_id = %s AND order_request.request_id = %s AND order_request.order_status = 0"
                         params5 = (store, request_id[0])
                         cursor.execute(orders_rem, params5)
                         amount = cursor.fetchone()
@@ -62,20 +62,22 @@ def reorder(store):
                     reorder_request = True
                     reorder_amount = max_stock - current_stock - ordered_amount
                     reordered_items[store_item[0]] = reorder_amount
+                    get_row = "SELECT request_id FROM order_request"
+                    cursor.execute(get_row)
+                    request_id = cursor.rowcount + 1
                     # insert into the database to keep track of the order
                     reorder_query = (
-                        "INSERT INTO order_request (vendor_id, store_id, amount_requested, order_time, "
-                        "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s, %s)")
+                        "INSERT INTO order_request (request_id,vendor_id, store_id, "
+                        "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s)")
                     params = (
-                        vendor, store, reorder_amount, datetime.datetime.now(), product_price * reorder_amount, 0, 0)
+                        request_id, vendor, store, product_price * reorder_amount, 0, 0)
                     cursor.execute(reorder_query, params)
                     # insert into the database for order_group to keep track of the order
-                    last_row = cursor.lastrowid
-                    order_group = ("INSERT INTO order_group (request_id, product_id) VALUES (%s, %s)")
-                    param = (last_row, store_item[0])
+                    order_group = ("INSERT INTO order_group (request_id, product_id, amount_requested) VALUES (%s, %s, %s)")
+                    param = (request_id, store_item[0], reorder_amount)
                     cursor.execute(order_group, param)
                     cnx.commit()
-                    # get total price so we can print it out to console
+                    # get total price, so we can print it out to console
                     reorder_price[store_item[0]] = product_price * reorder_amount
                     # get all the vendors reorders
                     if vendor in vendor_reorder:
@@ -88,6 +90,7 @@ def reorder(store):
                     # if stock is full, print a message
             elif current_stock == max_stock:
                 full_items.append(store_item[0])
+        # print out the reorder request
         if len(need_reorder) != 0:
             print('The following items have enough reorder requests: {}'.format(need_reorder))
         if len(full_items) == len(store_items):
@@ -167,7 +170,7 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             order_request = cursor.fetchone()
             if order_request is not None:
                 order_completed[order_request[0]] = order_request[1]
-                update_order = "UPDATE order_request SET seen_or_not = 1, order_status = 1 WHERE request_id = %s"
+                update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
                 params = (order_request[0],)
                 cursor.execute(update_order, params)
                 cnx.commit()
@@ -271,7 +274,7 @@ def stockInventory(store, shipment, shipment_items):
         invalid_product = 0
         for item in shipment_items:
             # Check if the shipment item is in the shipment
-            get_product = "SELECT order_group.product_id, order_request.amount_requested  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
+            get_product = "SELECT order_group.product_id, order_group.amount_requested, expected_delivery_time  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
             params = (item, shipment)
             cursor.execute(get_product, params)
             product_info = cursor.fetchone()
@@ -283,7 +286,7 @@ def stockInventory(store, shipment, shipment_items):
             return
         for item in shipment_items:
             # Check if the shipment item is in the shipment
-            get_product = "SELECT order_group.product_id, order_request.amount_requested  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
+            get_product = "SELECT order_group.product_id, order_group.amount_requested, shipment.expected_delivery_time, order_request.request_id  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
             params = (item, shipment)
             cursor.execute(get_product, params)
             product_info = cursor.fetchone()
@@ -315,12 +318,17 @@ def stockInventory(store, shipment, shipment_items):
 
             # update the shipment status to received at the time of the shipment
             update_shipment_info = "UPDATE shipment SET delivery_time = %s WHERE shipment_id = %s"
-            shipped_time = datetime.datetime.now() + datetime.timedelta(days=2)
+            shipped_time = product_info[2] + datetime.timedelta(days=2)
             params = (shipped_time, shipment)
             cursor.execute(update_shipment_info, params)
             cnx.commit()
-            shipment_success = True
 
+            # update the order request status to received
+            update_order_request = "UPDATE order_request SET order_status = 1 WHERE request_id = %s"
+            params = (product_info[3],)
+            cursor.execute(update_order_request, params)
+            cnx.commit()
+            shipment_success = True
         # if the shipment is successful
         if shipment_success:
             print("Shipment {} has been received".format(shipment))
@@ -449,8 +457,10 @@ def OnlineOrder(store, customer, order_items):
     else:
         cnx.close()
 
-#OnlineOrder(1, 1, {1: 1})
+OnlineOrder(1, 1, {1: 1})
+# reorder(1)
 # reorder(1)
 # reorder(2)
+# vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1], {1: 20})
 # vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [2], {2: 20})
-# stockInventory(1,1, {1: 20, 2: 20, 3: 4})
+# stockInventory(1,1, {1: 20})

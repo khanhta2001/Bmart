@@ -100,14 +100,13 @@ CREATE TABLE inventory_space (
 );
 
 CREATE TABLE order_request (
-	request_id INT AUTO_INCREMENT PRIMARY KEY,
+	request_id INT,
     store_id INT,
     vendor_id INT,
-    order_time TIME,
-    amount_requested INT,
     seen_or_not INT,
     total_cost INT,
     order_status INT,
+    PRIMARY KEY (request_id, vendor_id),
     CONSTRAINT FOREIGN KEY (store_id) REFERENCES store(store_id),
     CONSTRAINT FOREIGN KEY (vendor_id) REFERENCES vendor(vendor_id)
 );
@@ -134,6 +133,7 @@ CREATE TABLE shipment_group (
 CREATE TABLE order_group (
 	request_id INT,
     product_id INT,
+    amount_requested INT,
     CONSTRAINT FOREIGN KEY (request_id) REFERENCES order_request(request_id),
     CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
     PRIMARY KEY (request_id, product_id)
