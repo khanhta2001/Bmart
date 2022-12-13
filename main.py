@@ -3,12 +3,13 @@ import datetime
 import mysql.connector
 from mysql.connector import errorcode
 
-"""
-This function is used to reorder products for a store. It will check if new reorder requests are needed and if so send the requests.
-:param store: the store id, an integer
-:return:
-"""
+
 def reorder(store):
+    """
+    This function is used to reorder products for a store. It will check if new reorder requests are needed and if so send the requests.
+    :param store: the store id, an integer
+    :return:
+    """
     try:
         # connect with the database
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
@@ -29,12 +30,12 @@ def reorder(store):
         reordered_items = {}
         vendor_reorder = {}
         reorder_request = False
-        
+
         # check if reorder is needed for each store item
         full_stock_items = []
         need_reorder_items = []
         total_price = 0
-        for store_item in store_items: 
+        for store_item in store_items:
             item_price = "SELECT vendor_id, sell_price FROM price WHERE product_id = %s"
             cursor.execute(item_price, [store_item[0]])
             vendor_price = cursor.fetchone()
@@ -54,19 +55,19 @@ def reorder(store):
                 amount_requested = "SELECT order_group.amount_requested FROM order_group JOIN order_request ON order_group.request_id = order_request.request_id WHERE order_request.store_id = %s AND order_group.product_id = %s AND order_request.order_status = 0"
                 cursor.execute(amount_requested, [store, store_item[0]])
                 amount_requested = cursor.fetchall()
-                
+
                 total_requested = 0
                 if amount_requested != None:
                     for amount in amount_requested:
                         total_requested += amount[0]
-  
+
                 # if existing requests are not enough to fill the stock, we need to make new requests
                 if total_requested + current_stock < max_stock:
                     reorder_request = True
                     need_reorder_items.append(store_item[0])
                     new_reorder_amount = max_stock - current_stock - total_requested
-                    reordered_items[store_item[0]] = new_reorder_amount # amount for the new request
-                    
+                    reordered_items[store_item[0]] = new_reorder_amount  # amount for the new request
+
                     '''
                     get_row = "SELECT request_id FROM order_request"
                     cursor.execute(get_row)
@@ -74,8 +75,9 @@ def reorder(store):
                     '''
 
                     # insert into order_request table
-                    reorder_query = ("INSERT INTO order_request (vendor_id, store_id, total_cost, order_status, seen_or_not) "
-                                    " VALUES (%s, %s, %s, %s, %s)")
+                    reorder_query = (
+                        "INSERT INTO order_request (vendor_id, store_id, total_cost, order_status, seen_or_not) "
+                        " VALUES (%s, %s, %s, %s, %s)")
                     params = (vendor_id, store, product_price * new_reorder_amount, 0, 0)
                     cursor.execute(reorder_query, params)
 
@@ -85,7 +87,8 @@ def reorder(store):
                     request_id = cursor.fetchone()[0]
 
                     # insert into order_group table
-                    order_group = ("INSERT INTO order_group (request_id, product_id, amount_requested) VALUES (%s, %s, %s)")
+                    order_group = (
+                        "INSERT INTO order_group (request_id, product_id, amount_requested) VALUES (%s, %s, %s)")
                     param = (request_id, store_item[0], new_reorder_amount)
                     cursor.execute(order_group, param)
                     cnx.commit()
@@ -98,28 +101,27 @@ def reorder(store):
                         vendor_reorder[vendor_id] += 1
                     else:
                         vendor_reorder[vendor_id] = 1
-                
+
                 # if existing reorder requests are enough to fill the stock for an item
-                else:     
+                else:
                     full_stock_items.append(store_item[0])
 
             # if stock is already full for an item
             elif current_stock == max_stock:
                 full_stock_items.append(store_item[0])
 
-        
         if len(full_stock_items) == len(store_items):
             print('No need to reorder, all items are full or have enough existing orders')
         else:
             for item in full_stock_items:
                 print('Reorder request is not needed for the item {}'.format(item))
-        
+
         # print out the reorder if there is a need to reorder
         if reorder_request:
-            print("The following items have been reordered:{}".format(reordered_items))
-            print("The following vendors have reorder requests:{}".format(vendor_reorder))
-            print("Total price of the reorder requests:{}".format(total_price))
-    
+            print("The following items have been reordered: {}".format(reordered_items))
+            print("The following vendors have reorder requests: {}".format(vendor_reorder))
+            print("Total price of the reorder requests: {}".format(total_price))
+
     except mysql.connector.Error as err:
         print("Something went wrong: {}".format(err))
         return
@@ -141,98 +143,105 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
+
+        # check if the store exists
         query = "SELECT * FROM store WHERE store_id = %s"
         params = (store,)
         cursor.execute(query, params)
         store_name = cursor.fetchone()
-        # check if the store exists
         if store_name is None:
             print("Store id {} does not exist".format(store))
             return
+
+        vendor_store = {}
+        vendor_bmart = {}
         invalid_product = 0
+        vendors = {}
         for item in shipment_items:
             # add a name field to product table
-            get_product = "SELECT order_group.request_id, order_request.store_id FROM order_group JOIN order_request ON order_group.request_id = order_request.request_id WHERE order_group.product_id = %s AND order_request.store_id = %s AND order_request.order_status = 0"
-            params = (item,store)
+            get_product = "SELECT order_request.store_id, order_request.vendor_id FROM order_group JOIN " \
+                          "order_request ON order_group.request_id = order_request.request_id WHERE " \
+                          "order_group.product_id = %s AND order_request.store_id = %s" \
+                          " AND order_request.order_status = 0 "
+            params = (item, store)
             cursor.execute(get_product, params)
             product_name = cursor.fetchone()
             # if the item is not in the order group table
             if product_name is None:
                 print("Invalid shipment item {}!. This item is not needed for this order".format(item))
                 invalid_product += 1
-        # Remaining reorder requests for this store particularly
-        order_completed = {}
+            else:
+                if product_name[1] in vendors:
+                    vendors[product_name[1]].append(item)
+                else:
+                    vendors[product_name[1]] = [item]
+
+        # if there is invalid product, stop the function
         if invalid_product > 0:
             return
-        # update the order request as seen by vendor and will be completed
-        invalid_request = 0
         for request_id in reorder_list:
-            check_shipment = "SELECT request_id, delivery_time FROM shipment WHERE request_id = %s"
-            params = (request_id,)
-            cursor.execute(check_shipment, params)
-            shipment = cursor.fetchone()
-            # check if the shipment has been made
-            if shipment is not None:
-                if shipment[1] == 0:
+            # check if the items are all valid
+            request_order = "SELECT request_id FROM order_request WHERE request_id = %s"
+            cursor.execute(request_order, [request_id])
+            request_order = cursor.fetchone()
+            if request_order is None:
+                print("Request id {} does not exist".format(request_id))
+                return
+            # update the order request as seen by vendor and will be completed
+            for vendor_id in vendors:
+                # check if the shipment has been made by the same vendor for the same store
+                check_shipment = "SELECT request_id FROM shipment WHERE request_id = %s AND vendor_id = %s AND store_id = %s"
+                params = (request_id, vendor_id, store)
+                cursor.execute(check_shipment, params)
+                shipment = cursor.fetchone()
+                # check if the shipment has been made
+                if shipment is not None:
                     print("This shipment has already been made")
                     cnx.rollback()
                     cnx.close()
                     return
-            orders_rem = "SELECT request_id, vendor_id FROM " \
-                         "order_request WHERE " \
-                         "store_id = %s AND request_id = %s AND " \
-                         "order_status = 0 "
-            params5 = (store, request_id)
-            cursor.execute(orders_rem, params5)
-            order_request = cursor.fetchone()
-            if order_request is not None:
-                order_completed[order_request[0]] = order_request[1]
+                get_row = "SELECT shipment_id FROM shipment where store_id = %s and expected_delivery_time = %s"
+                cursor.execute(get_row, [store, delivery_time])
+                shipment_store = cursor.fetchone()
+                if shipment_store is None:
+                    shipment_store = [cursor.lastrowid]
+                # insert into shipment table and marked as shipped
+                shipment_request = "INSERT INTO shipment (shipment_id, expected_delivery_time, delivery_time,request_id, " \
+                                   "vendor_id, store_id) VALUES (%s, %s, %s, %s, %s, %s) "
+                params = (shipment_store[0], delivery_time, 0, request_id, vendor_id, store)
+                cursor.execute(shipment_request, params)
+
+                # insert into shipment_group table to track the shipment
+                for item in vendors[vendor_id]:
+                    shipment_group = "INSERT INTO shipment_group (shipment_id, request_id, product_id) VALUES (%s, %s, %s)"
+                    params = (shipment_store[0], request_id, item)
+                    cursor.execute(shipment_group, params)
+
+                # update the order request as seen by vendor and will be completed
                 update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
-                params = (order_request[0],)
+                params = (request_id,)
                 cursor.execute(update_order, params)
+
+                print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
                 cnx.commit()
-            else:
-                print("There is no order {} to be completed".format(request_id))
-                invalid_request += 1
 
-        if invalid_request > 0:
-            cnx.rollback()
-            cnx.close()
-            return
+                # Remaining reorder requests for specific store from that specific vendor
+                vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND " \
+                                          "vendor_id = %s AND store_id = %s AND request_id != %s "
+                cursor.execute(vendor_remaining_orders, (vendor_id, store, request_id))
+                vendor_store_remaining_orders = cursor.fetchone()
 
-        vendor_store = {}
-        vendor_bmart = {}
-        # get the vendor id and store id
-        for request_id in order_completed:
-            vendor_id = order_completed[request_id]
-            # insert into shipment table and marked as shipped
-            shipment_request = "INSERT INTO shipment (expected_delivery_time, delivery_time,request_id, vendor_id, store_id) VALUES (%s, %s, %s, %s, %s)"
-            params = (delivery_time, 0, request_id, vendor_id, store)
-            cursor.execute(shipment_request, params)
-            cnx.commit()
-            last_row = cursor.lastrowid
+                # Remaining reorder requests for all BMart stores from that specific vendor
+                vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND " \
+                                          "vendor_id = %s AND request_id != %s "
+                cursor.execute(vendor_remaining_orders, (vendor_id, request_id))
+                vendor_bmart_remaining_orders = cursor.fetchone()
 
-            # insert into shipment_group table to track the shipment
-            shipment_group = "INSERT INTO shipment_group (shipment_id, request_id) VALUES (%s, %s)"
-            params = (last_row, request_id)
-            cursor.execute(shipment_group, params)
-            cnx.commit()
-            print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
-            # Remaining reorder requests for specific store from that specific vendor
-            vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND store_id = %s AND request_id != %s"
-            cursor.execute(vendor_remaining_orders, (vendor_id, store, request_id))
-            vendor_store_remaining_orders = cursor.fetchone()
-
-            # Remaining reorder requests for all BMart stores from that specific vendor
-            vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND vendor_id = %s AND request_id != %s"
-            cursor.execute(vendor_remaining_orders, (vendor_id, request_id))
-            vendor_bmart_remaining_orders = cursor.fetchone()
-
-            # if the vendor has no more orders for that store
-            if vendor_id not in vendor_store or vendor_store_remaining_orders[0] != 0:
-                vendor_store[vendor_id] = vendor_store_remaining_orders[0]
-            if vendor_id not in vendor_bmart or vendor_bmart_remaining_orders[0] != 0:
-                vendor_bmart[vendor_id] = vendor_bmart_remaining_orders[0]
+                # if the vendor has no more orders for that store
+                if vendor_id not in vendor_store or vendor_store_remaining_orders[0] != 0:
+                    vendor_store[vendor_id] = vendor_store_remaining_orders[0]
+                if vendor_id not in vendor_bmart or vendor_bmart_remaining_orders[0] != 0:
+                    vendor_bmart[vendor_id] = vendor_bmart_remaining_orders[0]
 
         # print out the remaining orders for the vendor and that specific store
         if len(vendor_store) > 0:
@@ -253,16 +262,148 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
             print("Database does not exist")
         else:
             print(err)
+            cnx.rollback()
     else:
         cnx.close()
 
 
-def stockInventory(store, shipment, shipment_items):
+def stock_inventory(store, shipment, shipment_items):
     """
     This function is used to update the stock inventory when a shipment has arrived
     :param store: store_id, an integer
     :param shipment: shipment_id, an integer
     :param shipment_items: shipment_items, a dictionary of integers
+    :return:
+    """
+    try:
+        cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
+        cursor = cnx.cursor(buffered=True)
+
+        # check if the store exists
+        query = "SELECT * FROM store WHERE store_id = %s"
+        params = (store,)
+        cursor.execute(query, params)
+        store_name = cursor.fetchone()
+        if store_name is None:
+            print("Store id {} does not exist".format(store))
+            return
+
+        # check if the shipment exists
+        shipment_info = "SELECT shipment.shipment_id, shipment.vendor_id, shipment.store_id, order_group.product_id FROM shipment JOIN " \
+                        "order_request ON shipment.request_id = order_request.request_id JOIN order_group ON " \
+                        "order_request.request_id = order_group.request_id WHERE shipment.shipment_id = %s and order_request.order_status = 0"
+        params = (shipment,)
+        cursor.execute(shipment_info, params)
+        shipment_info = cursor.fetchone()
+        if shipment_info is None:
+            print("Invalid shipment! Shipment id {} does not exist".format(shipment))
+            return
+
+        difference_amount = {}
+        shipment_success = False
+        invalid_product = 0
+        shipped_time = 0
+        products = []
+
+        # check each item in shipment items is a valid item in the shipment
+        for item in shipment_items:
+            # Check if the shipment item is in the shipment
+            get_product = "SELECT order_group.product_id, order_group.amount_requested, " \
+                          "shipment.expected_delivery_time, order_request.request_id  FROM shipment JOIN order_group " \
+                          "ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id " \
+                          "= order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s "
+            params = (item, shipment)
+            cursor.execute(get_product, params)
+            product_info = cursor.fetchone()
+            products.append(product_info)
+            if product_info is None:
+                print("Invalid shipment item {}!. This item is not in the shipment".format(item))
+                invalid_product += 1
+            check_item = "SELECT product_id FROM inventory_space WHERE store_id = %s AND product_id = %s"
+            params = (store, item)
+            cursor.execute(check_item, params)
+            item_info = cursor.fetchone()
+            if item_info is None:
+                print("Invalid shipment item {}!. This item does not belong to the store".format(item))
+                invalid_product += 1
+
+        # if there is invalid product, return
+        if invalid_product != 0:
+            return
+
+        # if all the products are valid, update the stock inventory
+        for product_info in products:
+            # check the difference between the shipment item and the amount requested
+            item_amount = shipment_items[product_info[0]]
+            if product_info[1] < item_amount:
+                print("The amount requested for product id {} is less than the amount received".format(product_info[0]))
+                difference_amount[product_info[0]] = item_amount - product_info[1]
+            elif product_info[1] > item_amount:
+                print("The amount requested for product id {} is more than the amount received".format(product_info[0]))
+                difference_amount[product_info[0]] = product_info[1] - item_amount
+
+            # Check the stock inventory for the product
+            current_stock = "SELECT current_stock, maximum_space FROM inventory_space WHERE store_id = %s AND " \
+                            "product_id = %s "
+            params = (store, product_info[0])
+            bruh = product_info[0]
+            bruh1 = store
+            cursor.execute(current_stock, params)
+            current_stock = cursor.fetchone()
+            # check the total amount of stock inventory for the product
+            if current_stock[0] + item_amount > current_stock[1]:
+                print("The amount of product id {} in the inventory space is more than maximum space".format(
+                    product_info[0]))
+                print("This shipment will be rejected")
+                return
+            # update the stock inventory for the product if the total amount is less than the maximum space
+            stock = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
+            params = (current_stock[0] + item_amount, product_info[0], store)
+            cursor.execute(stock, params)
+
+            # update the shipment status to received at the time of the shipment
+            update_shipment_info = "UPDATE shipment SET delivery_time = %s WHERE shipment_id = %s"
+            shipped_time = product_info[2] + datetime.timedelta(days=2)
+            params = (shipped_time, shipment)
+            cursor.execute(update_shipment_info, params)
+
+            # update the order request status to received
+            update_order_request = "UPDATE order_request SET order_status = 1 WHERE request_id = %s"
+            params = (product_info[3],)
+            cursor.execute(update_order_request, params)
+            shipment_success = True
+        # if the shipment is successful
+        if shipment_success:
+            print("Shipment {} has been received".format(shipment))
+            print("Shipment information is as follows: shipment id: {}, vendor id: {}, arrived time: {}, product id: "
+                  "{}, amount requested: {}".format(shipment_info[0], shipment_info[1], shipped_time, shipment_info[3],
+                                                    shipment_items[shipment_info[3]]))
+            cnx.commit()
+
+            # If there is a difference between the amount requested and the amount sent by vendor, print it to console
+            if len(difference_amount) > 0:
+                print("The following items have a difference amount: {}".format(difference_amount))
+        else:
+            print("Shipment {} has not been received".format(shipment))
+            cnx.rollback()
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+    else:
+        cnx.close()
+
+
+# order_items is a dictionary where key is product and value is amount ordered
+def online_order(store, customer, order_items):
+    """
+    This function is used to place an online order by a customer
+    :param store: store_id, an integer
+    :param customer: customer_id, an integer
+    :param order_items: order_items, a dictionary of integers where key is product_id and value is quantity
     :return:
     """
     try:
@@ -276,109 +417,6 @@ def stockInventory(store, shipment, shipment_items):
         if store_name is None:
             print("Store id {} does not exist".format(store))
             return
-        # check if the shipment exists
-        shipment_info = "SELECT shipment.shipment_id, shipment.vendor_id, shipment.store_id, order_group.product_id FROM shipment JOIN " \
-                         "order_request ON shipment.request_id = order_request.request_id JOIN order_group ON " \
-                         "order_request.request_id = order_group.request_id WHERE shipment.shipment_id = %s "
-        params = (shipment,)
-        cursor.execute(shipment_info, params)
-        shipment_info = cursor.fetchone()
-        if shipment_info is None:
-            print("Invalid shipment! Shipment id {} does not exist".format(shipment))
-            return
-        difference_amount = {}
-        shipment_success = False
-        invalid_product = 0
-        for item in shipment_items:
-            # Check if the shipment item is in the shipment
-            get_product = "SELECT order_group.product_id, order_group.amount_requested, expected_delivery_time  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
-            params = (item, shipment)
-            cursor.execute(get_product, params)
-            product_info = cursor.fetchone()
-            if product_info is None:
-                print("Invalid shipment item {}!. This item is not in the shipment".format(item))
-                invalid_product += 1
-
-        if invalid_product != 0:
-            return
-        for item in shipment_items:
-            # Check if the shipment item is in the shipment
-            get_product = "SELECT order_group.product_id, order_group.amount_requested, shipment.expected_delivery_time, order_request.request_id  FROM shipment JOIN order_group ON shipment.request_id = order_group.request_id JOIN order_request ON shipment.request_id = order_request.request_id WHERE order_group.product_id = %s AND shipment.shipment_id = %s"
-            params = (item, shipment)
-            cursor.execute(get_product, params)
-            product_info = cursor.fetchone()
-            # check the difference between the shipment item and the amount requested
-            if product_info[1] < shipment_items[item]:
-                print("The amount requested for product id {} is less than the amount received".format(item))
-                difference_amount[item] = shipment_items[item] - product_info[1]
-            elif product_info[1] > shipment_items[item]:
-                print("The amount requested for product id {} is more than the amount received".format(item))
-                difference_amount[item] = shipment_items[item] - product_info[1]
-            # Check the stock inventory for the product
-            current_stock = "SELECT current_stock, maximum_space FROM inventory_space WHERE store_id = %s AND product_id = %s"
-            params = (store, item)
-            cursor.execute(current_stock, params)
-            current_stock = cursor.fetchone()
-            # check the total amount of stock inventory for the product
-            if current_stock[0] + shipment_items[item] > current_stock[1]:
-                print("The amount of product id {} in the inventory space is more than maximum space".format(item))
-                print("This shipment will be rejected")
-                cnx.rollback()
-                cnx.close()
-                return
-
-            # update the stock inventory for the product if the total amount is less than the maximum space
-            stock = "UPDATE inventory_space SET current_stock = %s WHERE product_id = %s and store_id = %s"
-            params = (current_stock[0] + shipment_items[item], item, store)
-            cursor.execute(stock, params)
-            cnx.commit()
-
-            # update the shipment status to received at the time of the shipment
-            update_shipment_info = "UPDATE shipment SET delivery_time = %s WHERE shipment_id = %s"
-            shipped_time = product_info[2] + datetime.timedelta(days=2)
-            params = (shipped_time, shipment)
-            cursor.execute(update_shipment_info, params)
-            cnx.commit()
-
-            # update the order request status to received
-            update_order_request = "UPDATE order_request SET order_status = 1 WHERE request_id = %s"
-            params = (product_info[3],)
-            cursor.execute(update_order_request, params)
-            cnx.commit()
-            shipment_success = True
-        # if the shipment is successful
-        if shipment_success:
-            print("Shipment {} has been received".format(shipment))
-            print("Shipment information is as follows: shipment id: {}, vendor id: {}, arrived time: {}, product id: {}, amount requested: {}".format(shipment_info[0], shipment_info[1], shipped_time, shipment_info[3], shipment_items[shipment_info[3]]))
-
-        # If there is a difference between the amount requested and the amount sent by vendor, print it to console
-        if len(difference_amount) > 0:
-            print("The following items have a difference amount: {}".format(difference_amount))
-
-    except mysql.connector.Error as err:
-        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-            print("Something is wrong with your user name or password")
-        elif err.errno == errorcode.ER_BAD_DB_ERROR:
-            print("Database does not exist")
-        else:
-            print(err)
-    else:
-        cnx.close()
-
-
-# order_items is a dictionary where key is product and value is amount ordered
-def OnlineOrder(store, customer, order_items):
-    """
-    This function is used to place an online order by a customer
-    :param store: store_id, an integer
-    :param customer: customer_id, an integer
-    :param order_items: order_items, a dictionary of integers where key is product_id and value is quantity
-    :return:
-    """
-    try:
-        cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
-        cursor = cnx.cursor(buffered=True)
-
         in_stock = 0
         # check if each of the product in the order are in stock in the current store
         for item in order_items:
@@ -388,7 +426,7 @@ def OnlineOrder(store, customer, order_items):
             # if an invalid product is entered, give the customer a warning message
             if product_inventory == None:
                 print('Invalid product! Product id {} does not exist in the store'.format(item))
-            else:    
+            else:
                 # get the name of the product from product table so if it's out of stock we can tell the customer
                 name = "SELECT product_name FROM product WHERE product_id = %s"
                 cursor.execute(name, [item])
@@ -397,10 +435,11 @@ def OnlineOrder(store, customer, order_items):
                 # if current stock of a product is less than the amount the customer entered
                 if product_inventory[0] < order_items[item]:
                     # give error message
-                    print('Purchase failed because ' + product_name + ' is out of stock at this store')
+                    print('Purchase failed because ' + product_name[0] + ' is out of stock at this store')
                     # and see if any other store in the same state has the product
                     address = "SELECT state FROM store where store_id = %s"
-                    cursor.execute(address, (store))
+                    params = (store,)
+                    cursor.execute(address, params)
                     current_state = cursor.fetchone()[0]
                     stock = "SELECT store_id FROM store WHERE state = %s"
                     cursor.execute(stock, [current_state])
@@ -408,11 +447,9 @@ def OnlineOrder(store, customer, order_items):
                     if available_store == None:
                         print('Unfortunately it is out of stock in all our stores in this state!')
                     else:
-                        print("This product is in stock in store " + available_store[0])
+                        print("This product is in stock in store " + str(available_store[0]))
                     break
-
                 in_stock += 1
- 
         # if all the products are in stock, continue with the transaction
         if in_stock == len(order_items):
             for item in order_items:
@@ -448,7 +485,7 @@ def OnlineOrder(store, customer, order_items):
 
             total_price = 0
             # A list of the ordered items and their quantities
-            print('Ordered items: ') 
+            print('Ordered items: ')
             for item in order_items:
                 # get the name of the product from product table 
                 name = "SELECT product_name FROM product WHERE product_id = %s"
@@ -460,10 +497,10 @@ def OnlineOrder(store, customer, order_items):
                 cursor.execute(price, [store, item])
                 item_price = cursor.fetchone()[0] * order_items[item]
                 total_price += item_price
-            
+
             # The total price for that order, based on the current store price for each of those items.
             print('Total price: ' + str(total_price))
-
+            cnx.commit()
     except mysql.connector.Error as err:
         if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
             print("Something is wrong with your user name or password")
@@ -474,10 +511,15 @@ def OnlineOrder(store, customer, order_items):
     else:
         cnx.close()
 
-# for i in range(50):
-#     OnlineOrder(1, 1, {1: 1})
-reorder(1)
-#reorder(2)
-# vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1], {1: 20})
-# vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [2], {2: 20})
-# stockInventory(1,1, {1: 20})
+
+# for i in range(5000):
+#     online_order(12, 1, {12: 1})
+# reorder(1)
+# reorder(2)
+# reorder(3)
+# reorder(4)
+# reorder(5)
+# reorder(6)
+# vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2], {1: 20, 2: 20})
+# vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [3], {3: 20})
+stock_inventory(1, 1, {1: 20, 2:20})
