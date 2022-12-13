@@ -200,30 +200,42 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
                     cnx.rollback()
                     cnx.close()
                     return
-                get_row = "SELECT shipment_id FROM shipment where store_id = %s and expected_delivery_time = %s"
-                cursor.execute(get_row, [store, delivery_time])
-                shipment_store = cursor.fetchone()
-                if shipment_store is None:
-                    shipment_store = [cursor.lastrowid]
-                # insert into shipment table and marked as shipped
-                shipment_request = "INSERT INTO shipment (shipment_id, expected_delivery_time, delivery_time,request_id, " \
-                                   "vendor_id, store_id) VALUES (%s, %s, %s, %s, %s, %s) "
-                params = (shipment_store[0], delivery_time, 0, request_id, vendor_id, store)
-                cursor.execute(shipment_request, params)
-
                 # insert into shipment_group table to track the shipment
                 for item in vendors[vendor_id]:
-                    shipment_group = "INSERT INTO shipment_group (shipment_id, request_id, product_id) VALUES (%s, %s, %s)"
-                    params = (shipment_store[0], request_id, item)
-                    cursor.execute(shipment_group, params)
+                    # check if the item in request id matches with vendor items
+                    match_product_request = "SELECT product_id FROM order_group WHERE product_id = %s AND request_id = %s"
+                    params = (item, request_id)
+                    cursor.execute(match_product_request, params)
+                    match_product_request = cursor.fetchone()
+                    # if matches then go ahead and insert into shipment_group table
+                    if match_product_request is not None:
+                        get_row = "SELECT shipment_id FROM shipment JOIN order_group ON order_group.request_id = " \
+                                  "shipment.request_id WHERE shipment.store_id = %s AND shipment.expected_delivery_time = " \
+                                  "%s"
+                        cursor.execute(get_row, [store, delivery_time])
+                        shipment_store = cursor.fetchone()
+                        if shipment_store is None:
+                            get_row = "SELECT shipment_id FROM shipment"
+                            cursor.execute(get_row)
+                            shipment_id = cursor.fetchall()
+                            shipment_store = [len(shipment_id) + 1]
+                        # insert into shipment table and marked as shipped
+                        shipment_request = "INSERT INTO shipment (shipment_id, expected_delivery_time, delivery_time,request_id, " \
+                                           "vendor_id, store_id) VALUES (%s, %s, %s, %s, %s, %s) "
+                        params = (shipment_store[0], delivery_time, 0, request_id, vendor_id, store)
+                        cursor.execute(shipment_request, params)
 
-                # update the order request as seen by vendor and will be completed
-                update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
-                params = (request_id,)
-                cursor.execute(update_order, params)
+                        shipment_group = "INSERT INTO shipment_group (shipment_id, request_id, product_id) VALUES (%s, %s, %s)"
+                        params = (shipment_store[0], request_id, item)
+                        cursor.execute(shipment_group, params)
 
-                print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
-                cnx.commit()
+                        # update the order request as seen by vendor and will be completed
+                        update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
+                        params = (request_id,)
+                        cursor.execute(update_order, params)
+
+                        print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
+                        cnx.commit()
 
                 # Remaining reorder requests for specific store from that specific vendor
                 vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND " \
@@ -346,8 +358,6 @@ def stock_inventory(store, shipment, shipment_items):
             current_stock = "SELECT current_stock, maximum_space FROM inventory_space WHERE store_id = %s AND " \
                             "product_id = %s "
             params = (store, product_info[0])
-            bruh = product_info[0]
-            bruh1 = store
             cursor.execute(current_stock, params)
             current_stock = cursor.fetchone()
             # check the total amount of stock inventory for the product
@@ -530,17 +540,17 @@ stock_inventory(1, 1, {1: 20, 2:20})
 # What are the top-selling product at a store?
 # takes in a store id as an int
 # prints a message with a product id as an int
-def top_selling_store (store): 
+def top_selling_store (store):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
-        top = "SELECT product_id FROM items AS i" 
+        top = "SELECT product_id FROM items AS i"
         "JOIN customer_order AS co ON i.order_id = co.order_id "
-        "JOIN store AS s ON s.store_id = co.store_id" 
+        "JOIN store AS s ON s.store_id = co.store_id"
         "WHERE store_id = %s"
         "GROUP BY product_id"
         "ORDER BY COUNT(item_id) LIMIT 1"
-        cursor.execute(top, [store])  
+        cursor.execute(top, [store])
         top_selling = cursor.fetchone()[0]
         print('The top selling product in store ' + store + ' is ' + top_selling)
     except mysql.connector.Error as err:
@@ -562,7 +572,7 @@ def top_selling_state(state):
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
         top = "SELECT product_id FROM items AS i JOIN customer_order AS co ON i.order_id = co.order_id JOIN store AS s ON s.store_id = co.store_id WHERE state = %s GROUP BY product_id ORDER BY COUNT(item_id) LIMIT 1"
-        cursor.execute(top, [state])  
+        cursor.execute(top, [state])
         top_selling = cursor.fetchone()[0]
         print('The top selling product in state ' + state + ' is ' + top_selling)
     except mysql.connector.Error as err:
@@ -581,14 +591,14 @@ def top_selling_state(state):
 def most_revenue(state):
     try:
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
-        cursor = cnx.cursor(buffered=True)   
+        cursor = cnx.cursor(buffered=True)
         top = "SELECT store_id FROM store AS s"
         "JOIN customer_order AS co ON s.store_id = co.store_id"
         "JOIN items AS i ON i.order_id = co.order_id"
         "WHERE state = %s"
         "GROUP BY s.store_id"
         "ORDER BY SUM(cost) DESC LIMIT 1"
-        cursor.execute(top, [state])  
+        cursor.execute(top, [state])
         most_revenue = cursor.fetchone()[0]
         print('The store that has made the most revenue in ' + state + ' is ' + most_revenue)
     except:

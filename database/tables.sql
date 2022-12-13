@@ -18,7 +18,7 @@ DROP TABLE IF EXISTS product;
 CREATE TABLE store (
 	store_id INT PRIMARY KEY,
     address VARCHAR(30),
-    state VARCHAR(10),
+    state VARCHAR(2),
     phone_number INT,
     operation_hours INT
 );
@@ -129,27 +129,27 @@ CREATE TABLE shipment_group (
 	shipment_id INT,
     request_id INT,
     product_id INT,
+    PRIMARY KEY (shipment_id, request_id, product_id),
     CONSTRAINT FOREIGN KEY (shipment_id) REFERENCES shipment(shipment_id),
     CONSTRAINT FOREIGN KEY (request_id) REFERENCES order_request(request_id),
-    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
-    PRIMARY KEY (shipment_id, request_id, product_id)
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id)
 );
 
 CREATE TABLE order_group (
 	request_id INT,
     product_id INT,
     amount_requested INT,
+    PRIMARY KEY (request_id, product_id),
     CONSTRAINT FOREIGN KEY (request_id) REFERENCES order_request(request_id),
-    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
-    PRIMARY KEY (request_id, product_id)
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id)
 );
 
 CREATE TABLE product_package (
 	packaging_number INT,
     size VARCHAR(5),
     product_id INT,
-    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id),
-	PRIMARY KEY (product_id, size, packaging_number)
+    PRIMARY KEY (product_id, size, packaging_number),
+    CONSTRAINT FOREIGN KEY (product_id) REFERENCES product(product_id)
 );
 
 
