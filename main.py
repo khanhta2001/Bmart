@@ -200,30 +200,42 @@ def vendor_shipment(store, delivery_time, reorder_list, shipment_items):
                     cnx.rollback()
                     cnx.close()
                     return
-                get_row = "SELECT shipment_id FROM shipment where store_id = %s and expected_delivery_time = %s"
-                cursor.execute(get_row, [store, delivery_time])
-                shipment_store = cursor.fetchone()
-                if shipment_store is None:
-                    shipment_store = [cursor.lastrowid]
-                # insert into shipment table and marked as shipped
-                shipment_request = "INSERT INTO shipment (shipment_id, expected_delivery_time, delivery_time,request_id, " \
-                                   "vendor_id, store_id) VALUES (%s, %s, %s, %s, %s, %s) "
-                params = (shipment_store[0], delivery_time, 0, request_id, vendor_id, store)
-                cursor.execute(shipment_request, params)
-
                 # insert into shipment_group table to track the shipment
                 for item in vendors[vendor_id]:
-                    shipment_group = "INSERT INTO shipment_group (shipment_id, request_id, product_id) VALUES (%s, %s, %s)"
-                    params = (shipment_store[0], request_id, item)
-                    cursor.execute(shipment_group, params)
+                    # check if the item in request id matches with vendor items
+                    match_product_request = "SELECT product_id FROM order_group WHERE product_id = %s AND request_id = %s"
+                    params = (item, request_id)
+                    cursor.execute(match_product_request, params)
+                    match_product_request = cursor.fetchone()
+                    # if matches then go ahead and insert into shipment_group table
+                    if match_product_request is not None:
+                        get_row = "SELECT shipment_id FROM shipment JOIN order_group ON order_group.request_id = " \
+                                  "shipment.request_id WHERE shipment.store_id = %s AND shipment.expected_delivery_time = " \
+                                  "%s"
+                        cursor.execute(get_row, [store, delivery_time])
+                        shipment_store = cursor.fetchone()
+                        if shipment_store is None:
+                            get_row = "SELECT shipment_id FROM shipment"
+                            cursor.execute(get_row)
+                            shipment_id = cursor.fetchall()
+                            shipment_store = [len(shipment_id) + 1]
+                        # insert into shipment table and marked as shipped
+                        shipment_request = "INSERT INTO shipment (shipment_id, expected_delivery_time, delivery_time,request_id, " \
+                                           "vendor_id, store_id) VALUES (%s, %s, %s, %s, %s, %s) "
+                        params = (shipment_store[0], delivery_time, 0, request_id, vendor_id, store)
+                        cursor.execute(shipment_request, params)
 
-                # update the order request as seen by vendor and will be completed
-                update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
-                params = (request_id,)
-                cursor.execute(update_order, params)
+                        shipment_group = "INSERT INTO shipment_group (shipment_id, request_id, product_id) VALUES (%s, %s, %s)"
+                        params = (shipment_store[0], request_id, item)
+                        cursor.execute(shipment_group, params)
 
-                print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
-                cnx.commit()
+                        # update the order request as seen by vendor and will be completed
+                        update_order = "UPDATE order_request SET seen_or_not = 1 WHERE request_id = %s"
+                        params = (request_id,)
+                        cursor.execute(update_order, params)
+
+                        print("Shipment request from vendor_id {} has been sent to store_id {}".format(vendor_id, store))
+                        cnx.commit()
 
                 # Remaining reorder requests for specific store from that specific vendor
                 vendor_remaining_orders = "SELECT COUNT(request_id) FROM order_request WHERE order_status = 0 AND " \
@@ -346,8 +358,6 @@ def stock_inventory(store, shipment, shipment_items):
             current_stock = "SELECT current_stock, maximum_space FROM inventory_space WHERE store_id = %s AND " \
                             "product_id = %s "
             params = (store, product_info[0])
-            bruh = product_info[0]
-            bruh1 = store
             cursor.execute(current_stock, params)
             current_stock = cursor.fetchone()
             # check the total amount of stock inventory for the product
@@ -520,6 +530,6 @@ def online_order(store, customer, order_items):
 # reorder(4)
 # reorder(5)
 # reorder(6)
-# vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2], {1: 20, 2: 20})
+#vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2], {1: 20, 2: 20})
 # vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [3], {3: 20})
-stock_inventory(1, 1, {1: 20, 2:20})
+#stock_inventory(1, 1, {1: 20, 2:20})

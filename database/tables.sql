@@ -18,7 +18,7 @@ DROP TABLE IF EXISTS product;
 CREATE TABLE store (
 	store_id INT PRIMARY KEY,
     address VARCHAR(30),
-    state VARCHAR(10),
+    state VARCHAR(2),
     phone_number INT,
     operation_hours INT
 );
