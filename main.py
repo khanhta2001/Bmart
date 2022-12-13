@@ -3,106 +3,123 @@ import datetime
 import mysql.connector
 from mysql.connector import errorcode
 
+"""
+This function is used to reorder products for a store. It will check if new reorder requests are needed and if so send the requests.
+:param store: the store id, an integer
+:return:
+"""
 def reorder(store):
-    """
-    This function is used to reorder products for a store.  It will check the reorder point and reorder amount for each product
-    :param store: the store id, an integer
-    :return:
-    """
     try:
         # connect with the database
         cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
         cursor = cnx.cursor(buffered=True)
         query = "SELECT * FROM store WHERE store_id = %s"
-        params = (store,)
-        cursor.execute(query, params)
-        store_name = cursor.fetchone()
-        # check if the store exists
-        if store_name is None:
+        cursor.execute(query, [store])
+        store = cursor.fetchone()
+        # check if the store exists, if not whole order is rolled back
+        if store is None:
             print("Store id {} does not exist".format(store))
             return
-        # check inventory of the store
+
+        # if store exists, check inventory of the store to see if more orders need to be made
         store_inventory = "SELECT product_id, maximum_space, current_stock FROM inventory_space WHERE store_id = %s"
-        cursor.execute(store_inventory, (store,))
+        cursor.execute(store_inventory, [store])
         store_items = cursor.fetchall()
+
         reordered_items = {}
         vendor_reorder = {}
-        reorder_price = {}
         reorder_request = False
+        
         # check if reorder is needed for each store item
-        full_items = []
-        need_reorder = []
-        for store_item in store_items:
+        full_stock_items = []
+        need_reorder_items = []
+        total_price = 0
+        for store_item in store_items: 
             item_price = "SELECT vendor_id, sell_price FROM price WHERE product_id = %s"
-            cursor.execute(item_price, (store_item[0],))
+            cursor.execute(item_price, [store_item[0]])
             vendor_price = cursor.fetchone()
-            vendor = vendor_price[0]
+            # check if the item is invalid, if not the whole reorder should be rolled back
+            if vendor_price == None:
+                print("Product id {} is invalid!".format(store_item[0]))
+                return
+            # if the item is valid, continue with reorder
+            vendor_id = vendor_price[0]
             product_price = vendor_price[1]
-            current_stock = store_item[2]
             max_stock = store_item[1]
+            current_stock = store_item[2]
+
+            # if current stock for an item is less than maximum space, then continue with reorder
             if current_stock < max_stock:
-                # Check if the request id is equivalent to the request we are working
-                item_reorder = "SELECT request_id FROM order_group WHERE product_id = %s"
-                cursor.execute(item_reorder, (store_item[0],))
-                item_reorder = cursor.fetchall()
-                ordered_amount = 0
-                # check if there is outstanding reorder request for the item
-                if len(item_reorder) != 0:
-                    for request_id in item_reorder:
-                        orders_rem = "SELECT order_group.amount_requested FROM order_request JOIN order_group ON order_request.request_id = order_group.request_id WHERE order_request.store_id = %s AND order_request.request_id = %s AND order_request.order_status = 0"
-                        params5 = (store, request_id[0])
-                        cursor.execute(orders_rem, params5)
-                        amount = cursor.fetchone()
-                        # increment by the amount of item in each outstanding order request
-                        if amount is not None:
-                            ordered_amount += amount[0]
+                # get all existing request amounts by the store for the product
+                amount_requested = "SELECT og.amount_requested FROM order_group AS og JOIN order_request AS or ON og.request_id = or.request_id WHERE or.store_id = %s AND og.product_id = %s AND or.order_status = 0"
+                cursor.execute(amount_requested, [store, store_item[0]])
+                amount_requested = cursor.fetchall()
                 
-                # check if new reorder request is needed for the item
-                if ordered_amount + current_stock < max_stock:
+                total_requested = 0
+                if amount_requested != None:
+                    for amount in amount_requested:
+                        total_requested += amount[0]
+  
+                # if existing requests are not enough to fill the stock, we need to make new requests
+                if total_requested + current_stock < max_stock:
                     reorder_request = True
-                    reorder_amount = max_stock - current_stock - ordered_amount
-                    reordered_items[store_item[0]] = reorder_amount
+                    need_reorder_items.append(store_item[0])
+                    new_reorder_amount = max_stock - current_stock - total_requested
+                    reordered_items[store_item[0]] = new_reorder_amount # amount for the new request
+                    
+                    '''
                     get_row = "SELECT request_id FROM order_request"
                     cursor.execute(get_row)
                     request_id = cursor.rowcount + 1
-                    # insert into the database to keep track of the order
-                    reorder_query = (
-                        "INSERT INTO order_request (request_id,vendor_id, store_id, "
-                        "total_cost, order_status,seen_or_not) VALUES (%s,%s, %s, %s, %s, %s)")
-                    params = (
-                        request_id, vendor, store, product_price * reorder_amount, 0, 0)
+                    '''
+
+                    # insert into order_request table
+                    reorder_query = ("INSERT INTO order_request (vendor_id, store_id, total_cost, order_status, seen_or_not) "
+                                    " VALUES (%s, %s, %s, %s, %s)")
+                    params = (vendor_id, store, product_price * new_reorder_amount, 0, 0)
                     cursor.execute(reorder_query, params)
-                    # insert into the database for order_group to keep track of the order
+
+                    # get the request_id of the request we just inserted
+                    request_id = "SELECT request_id FROM order_request ORDER BY request_id DESC LIMIT 1"
+                    cursor.execute(request_id)
+                    request_id = cursor.fetchone()[0]
+
+                    # insert into order_group table
                     order_group = ("INSERT INTO order_group (request_id, product_id, amount_requested) VALUES (%s, %s, %s)")
-                    param = (request_id, store_item[0], reorder_amount)
+                    param = (request_id, store_item[0], new_reorder_amount)
                     cursor.execute(order_group, param)
                     cnx.commit()
-                    # get total price, so we can print it out to console
-                    reorder_price[store_item[0]] = product_price * reorder_amount
-                    # get all the vendors reorders
-                    if vendor in vendor_reorder:
-                        vendor_reorder[vendor] += 1
+
+                    # get total price of this reorder
+                    total_price += product_price * new_reorder_amount
+
+                    # increment orders with each of the vendors
+                    if vendor_id in vendor_reorder:
+                        vendor_reorder[vendor_id] += 1
                     else:
-                        vendor_reorder[vendor] = 1
-                else:
-                    need_reorder.append(store_item[0])
-                    print('Enough reorder requests have been made')
-                    # if stock is full, print a message
+                        vendor_reorder[vendor_id] = 1
+                
+                # if existing reorder requests are enough to fill the stock for an item
+                else:     
+                    full_stock_items.append(store_item[0])
+
+            # if stock is already full for an item
             elif current_stock == max_stock:
-                full_items.append(store_item[0])
-        # print out the reorder request
-        if len(need_reorder) != 0:
-            print('The following items have enough reorder requests: {}'.format(need_reorder))
-        if len(full_items) == len(store_items):
-            print('No need to reorder, all items are full')
+                full_stock_items.append(store_item[0])
+
+        
+        if len(full_stock_items) == len(store_items):
+            print('No need to reorder, all items are full or have enough existing orders')
         else:
-            for item in full_items:
+            for item in full_stock_items:
                 print('Reorder request is not needed for the item {}'.format(item))
+        
         # print out the reorder if there is a need to reorder
         if reorder_request:
             print("The following items have been reordered:{}".format(reordered_items))
             print("The following vendors have reorder requests:{}".format(vendor_reorder))
-            print("Total price of each reorder request:{}".format(reorder_price))
+            print("Total price of the reorder requests is:{}".format(total_price))
+    
     except mysql.connector.Error as err:
         print("Something went wrong: {}".format(err))
         return
