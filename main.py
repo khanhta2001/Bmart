@@ -523,13 +523,88 @@ def online_order(store, customer, order_items):
 
 
 # for i in range(5000):
-#     online_order(12, 1, {12: 1})
+#     online_order(1, 1, {1: 5})
 # reorder(1)
 # reorder(2)
 # reorder(3)
 # reorder(4)
 # reorder(5)
 # reorder(6)
-#vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2], {1: 20, 2: 20})
-# vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [3], {3: 20})
-#stock_inventory(1, 1, {1: 20, 2:20})
+vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1, 2], {1: 20, 2: 20})
+vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [3], {3: 20})
+stock_inventory(1, 1, {1: 20, 2:20})
+
+
+# Bonus functions
+
+# What are the top-selling product at a store?
+# takes in a store id as an int
+# prints a message with a product id as an int
+def top_selling_store (store):
+    try:
+        cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
+        cursor = cnx.cursor(buffered=True)
+        top = "SELECT product_id FROM items AS i"
+        "JOIN customer_order AS co ON i.order_id = co.order_id "
+        "JOIN store AS s ON s.store_id = co.store_id"
+        "WHERE store_id = %s"
+        "GROUP BY product_id"
+        "ORDER BY COUNT(item_id) LIMIT 1"
+        cursor.execute(top, [store])
+        top_selling = cursor.fetchone()[0]
+        print('The top selling product in store ' + store + ' is ' + top_selling)
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+    else:
+        cnx.close()
+
+
+# What are the top-selling product in a state?
+# takes in a two letted state as a string
+# prints a message with a product id as an int
+def top_selling_state(state):
+    try:
+        cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
+        cursor = cnx.cursor(buffered=True)
+        top = "SELECT product_id FROM items AS i JOIN customer_order AS co ON i.order_id = co.order_id JOIN store AS s ON s.store_id = co.store_id WHERE state = %s GROUP BY product_id ORDER BY COUNT(item_id) LIMIT 1"
+        cursor.execute(top, [state])
+        top_selling = cursor.fetchone()[0]
+        print('The top selling product in state ' + state + ' is ' + top_selling)
+    except mysql.connector.Error as err:
+        if err.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+            print("Something is wrong with your user name or password")
+        elif err.errno == errorcode.ER_BAD_DB_ERROR:
+            print("Database does not exist")
+        else:
+            print(err)
+    else:
+        cnx.close()
+
+# Which store has generated the most revenue in a state?
+# takes in a two letted state as a string
+# prints a message with a store id as an int
+def most_revenue(state):
+    try:
+        cnx = mysql.connector.connect(user='JSKK', password='cs314', host='cs314.iwu.edu', database='jskk')
+        cursor = cnx.cursor(buffered=True)
+        top = "SELECT store_id FROM store AS s"
+        "JOIN customer_order AS co ON s.store_id = co.store_id"
+        "JOIN items AS i ON i.order_id = co.order_id"
+        "WHERE state = %s"
+        "GROUP BY s.store_id"
+        "ORDER BY SUM(cost) DESC LIMIT 1"
+        cursor.execute(top, [state])
+        most_revenue = cursor.fetchone()[0]
+        print('The store that has made the most revenue in ' + state + ' is ' + most_revenue)
+    except:
+        print("Database does not exist")
+    else:
+        cnx.close()
+
+#top_selling_state('IL')
+
