@@ -15,9 +15,9 @@ def reorder(store):
         cursor = cnx.cursor(buffered=True)
         query = "SELECT * FROM store WHERE store_id = %s"
         cursor.execute(query, [store])
-        store = cursor.fetchone()
+        store_info = cursor.fetchone()
         # check if the store exists, if not whole order is rolled back
-        if store is None:
+        if store_info is None:
             print("Store id {} does not exist".format(store))
             return
 
@@ -51,7 +51,7 @@ def reorder(store):
             # if current stock for an item is less than maximum space, then continue with reorder
             if current_stock < max_stock:
                 # get all existing request amounts by the store for the product
-                amount_requested = "SELECT og.amount_requested FROM order_group AS og JOIN order_request AS or ON og.request_id = or.request_id WHERE or.store_id = %s AND og.product_id = %s AND or.order_status = 0"
+                amount_requested = "SELECT order_group.amount_requested FROM order_group JOIN order_request ON order_group.request_id = order_request.request_id WHERE order_request.store_id = %s AND order_group.product_id = %s AND order_request.order_status = 0"
                 cursor.execute(amount_requested, [store, store_item[0]])
                 amount_requested = cursor.fetchall()
                 
@@ -118,7 +118,7 @@ def reorder(store):
         if reorder_request:
             print("The following items have been reordered:{}".format(reordered_items))
             print("The following vendors have reorder requests:{}".format(vendor_reorder))
-            print("Total price of the reorder requests is:{}".format(total_price))
+            print("Total price of the reorder requests:{}".format(total_price))
     
     except mysql.connector.Error as err:
         print("Something went wrong: {}".format(err))
@@ -474,11 +474,10 @@ def OnlineOrder(store, customer, order_items):
     else:
         cnx.close()
 
-for i in range(50):
-    OnlineOrder(1, 1, {1: 1})
-# reorder(1)
-# reorder(1)
-# reorder(2)
+# for i in range(50):
+#     OnlineOrder(1, 1, {1: 1})
+reorder(1)
+#reorder(2)
 # vendor_shipment(1, datetime.datetime.now() + datetime.timedelta(days=2), [1], {1: 20})
 # vendor_shipment(2, datetime.datetime.now() + datetime.timedelta(days=2), [2], {2: 20})
 # stockInventory(1,1, {1: 20})

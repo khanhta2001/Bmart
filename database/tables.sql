@@ -100,7 +100,7 @@ CREATE TABLE inventory_space (
 );
 
 CREATE TABLE order_request (
-	request_id INT,
+	request_id INT AUTO_INCREMENT,
     store_id INT,
     vendor_id INT,
     seen_or_not INT,
