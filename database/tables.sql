@@ -86,7 +86,8 @@ CREATE TABLE items (
 	item_id INT PRIMARY KEY,
     order_id INT,
     cost INT,
-    CONSTRAINT FOREIGN KEY (order_id) REFERENCES customer_order(order_id)
+    CONSTRAINT FOREIGN KEY (order_id) REFERENCES customer_order(order_id),
+    CONSTRAINT FOREIGN KEY (item_id) REFERENCES product(product_id)
 );
 
 CREATE TABLE inventory_space (
